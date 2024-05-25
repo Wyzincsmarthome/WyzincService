@@ -41,6 +41,7 @@ async function executeAsyncTask () {
 
 setInterval(function(){
     executeAsyncTask();
+    console.log("> - - - - - - - - - - - - - <");
 }, 1000 * 60 * 5);
 
 /**
