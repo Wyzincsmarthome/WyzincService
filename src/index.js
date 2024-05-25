@@ -39,7 +39,9 @@ async function executeAsyncTask () {
     shopifyClient = null;
 }
 
-executeAsyncTask();
+setInterval(function(){
+    executeAsyncTask();
+}, 1000 * 60 * 5);
 
 /**
  * LINKS:
