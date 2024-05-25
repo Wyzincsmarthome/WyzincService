@@ -1,0 +1,1 @@
+exports.getAllEANs = require('./getAllEANs.js');

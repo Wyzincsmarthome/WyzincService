@@ -1,0 +1,1 @@
+exports.getProductFromSupplier = require('./getProductFromSupplier.js');
