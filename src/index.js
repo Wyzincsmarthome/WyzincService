@@ -48,9 +48,10 @@ executeAsyncTask();
 setInterval(function(){
     executeAsyncTask();
     console.log("> - - - - - - - - - - - - - <");
-}, 1000 * 60 * 10);
+}, 1000 * 60 * 14);
 
 // 2 Mins: Deu
+// 10 Mins: Deu
 
 /**
  * LINKS:
