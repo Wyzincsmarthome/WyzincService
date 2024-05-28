@@ -1,6 +1,11 @@
 require('dotenv').config();
 require('colors');
 
+// Para usar render sem precisar pagar:
+const express = require('express');
+const app = express();
+app.listen(3000, () => console.log('Server Running on Port 3001!'));
+
 const fs = require('fs');
 const { getProductFromSupplier } = require('./functions/supplierAPI');
 const { createAuth, getAllProductsFromShopify, updateProductFromShopify, createProductToShopify } = require('./functions/shopifyAPI');
