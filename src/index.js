@@ -48,7 +48,7 @@ executeAsyncTask();
 setInterval(function(){
     executeAsyncTask();
     console.log("> - - - - - - - - - - - - - <");
-}, 1000 * 60 * 30);
+}, 1000 * 60 * 2);
 
 /**
  * LINKS:
