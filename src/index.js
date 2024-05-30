@@ -23,6 +23,9 @@ async function executeAsyncTask () {
     let shopifyProductsList = await getAllProductsFromShopify(shopifyClient);
 
     for(let productInfo of EANProductsList) {
+        console.log("-------------------------");
+        console.log(EANProductsList)
+        console.log("-------------------------");
         /* > Obter EAN e CustomPrice da Linha */
         let productEAN = productInfo.split('/')[0];
         let productCustomPrice = productInfo.split('/')[1] || null;
