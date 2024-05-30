@@ -53,4 +53,4 @@ executeAsyncTask();
 setInterval(function(){
     executeAsyncTask();
     console.log("> - - - - - - - - - - - - - <");
-}, 1000 * 60 * 2);
+}, 1000 * 60 * 60); //1h
