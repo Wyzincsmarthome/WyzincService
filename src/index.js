@@ -24,13 +24,10 @@ async function executeAsyncTask () {
 
     for(let productInfo of EANProductsList) {
         if(productInfo === "") return;
-        console.log("-------------------------");
-        console.log(EANProductsList)
-        console.log("-------------------------");
+        
         /* > Obter EAN e CustomPrice da Linha */
         let productEAN = productInfo.split('/')[0];
         let productCustomPrice = productInfo.split('/')[1] || null;
-        console.log("> " + productInfo)
 
         /* > Descobrir se o Produto existe no Fornecedor (pelo EAN) */
         let productFromSupplier = await getProductFromSupplier(productEAN);
