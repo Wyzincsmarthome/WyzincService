@@ -26,6 +26,7 @@ async function executeAsyncTask () {
         /* > Obter EAN e CustomPrice da Linha */
         let productEAN = productInfo.split('/')[0];
         let productCustomPrice = productInfo.split('/')[1] || null;
+        consoe.log("> " + productInfo)
 
         /* > Descobrir se o Produto existe no Fornecedor (pelo EAN) */
         let productFromSupplier = await getProductFromSupplier(productEAN);
@@ -51,7 +52,7 @@ executeAsyncTask();
 setInterval(function(){
     executeAsyncTask();
     console.log("> - - - - - - - - - - - - - <");
-}, 1000 * 60 * 30);
+}, 1000 * 60 * 2);
 
 // 2 Mins: Deu
 // 10 Mins: Deu
