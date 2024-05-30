@@ -4,7 +4,8 @@ require('colors');
 // Para usar render sem precisar pagar:
 const express = require('express');
 const app = express();
-app.listen(3000, () => console.log('Server Running on Port 3001!'));
+app.get('/', (req, res) => { res.send('Hello World!') });
+app.listen(3000, () => console.log('Server Running on Port 3000!'));
 
 const fs = require('fs');
 const { getProductFromSupplier } = require('./functions/supplierAPI');
