@@ -54,12 +54,3 @@ setInterval(function(){
     executeAsyncTask();
     console.log("> - - - - - - - - - - - - - <");
 }, 1000 * 60 * 2);
-
-// 2 Mins: Deu
-// 10 Mins: Deu
-
-/**
- * LINKS:
- * > https://shopify.dev/docs/api/usage/access-scopes
- * > https://prnt.sc/UhM02-wK3hev
- */
