@@ -23,6 +23,7 @@ async function executeAsyncTask () {
     let shopifyProductsList = await getAllProductsFromShopify(shopifyClient);
 
     for(let productInfo of EANProductsList) {
+        if(productInfo === "") return;
         console.log("-------------------------");
         console.log(EANProductsList)
         console.log("-------------------------");
