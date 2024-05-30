@@ -26,7 +26,7 @@ async function executeAsyncTask () {
         /* > Obter EAN e CustomPrice da Linha */
         let productEAN = productInfo.split('/')[0];
         let productCustomPrice = productInfo.split('/')[1] || null;
-        consoe.log("> " + productInfo)
+        console.log("> " + productInfo)
 
         /* > Descobrir se o Produto existe no Fornecedor (pelo EAN) */
         let productFromSupplier = await getProductFromSupplier(productEAN);
