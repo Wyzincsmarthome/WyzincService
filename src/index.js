@@ -17,10 +17,10 @@ async function executeAsyncTask () {
     let shopifyClient = await createAuth();
 
     /* > Obter Lista de EANs (do TXT) */
-    const EANProductsList = fs.readFileSync('src/productsList.txt', { encoding: 'utf8', flag: 'r' }).split('\n');
+    let EANProductsList = fs.readFileSync('src/productsList.txt', { encoding: 'utf8', flag: 'r' }).split('\n');
     
     /* > Obter Lista de Produtos (da Shopify) */
-    const shopifyProductsList = await getAllProductsFromShopify(shopifyClient);
+    let shopifyProductsList = await getAllProductsFromShopify(shopifyClient);
 
     for(let productInfo of EANProductsList) {
         /* > Obter EAN e CustomPrice da Linha */
@@ -41,8 +41,10 @@ async function executeAsyncTask () {
         (tempShopifyProduct) ? await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier) : await createProductToShopify(shopifyClient, productFromSupplier);
     }
     
-    /* > Fechar Cliente Shopify */
+    /* > 'Esvaziar' Variáveis */
     shopifyClient = null;
+    EANProductsList = null;
+    shopifyProductsList = null;
 }
 
 executeAsyncTask();
