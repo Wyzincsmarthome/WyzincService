@@ -7,6 +7,7 @@ const app = express();
 app.get('/', (req, res) => { res.send('Hello World!') });
 app.listen(3000, () => console.log('Server Running on Port 3000!'));
 
+const delay = require('delay');
 const fs = require('fs');
 const { getProductFromSupplier } = require('./functions/supplierAPI');
 const { createAuth, getAllProductsFromShopify, updateProductFromShopify, createProductToShopify } = require('./functions/shopifyAPI');
@@ -39,17 +40,9 @@ async function executeAsyncTask () {
         /* > Verificar se o Produto existe na Shopify (pelo EAN) */
         let tempShopifyProduct = shopifyProductsList.find((shopifyProduct) => shopifyProduct.variants[0].sku === productEAN);
 
-        /* > Criar ou Atualizar Produto na Shopify */
-
-        if(tempShopifyProduct) {
-            console.log("> U".blue);
-            await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier);
-        } else {
-            console.log("> C".blue);
-            await createProductToShopify(shopifyClient, productFromSupplier);
-        }
-        
-        //(tempShopifyProduct) ? await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier) : await createProductToShopify(shopifyClient, productFromSupplier);
+        /* > Criar ou Atualizar Produto na Shopify */      
+        (tempShopifyProduct) ? await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier) : await createProductToShopify(shopifyClient, productFromSupplier);
+        await delay(1000);
     }
     
     /* > 'Esvaziar' Variáveis */
