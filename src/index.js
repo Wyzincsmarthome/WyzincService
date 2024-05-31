@@ -7,7 +7,7 @@ const app = express();
 app.get('/', (req, res) => { res.send('Hello World!') });
 app.listen(3000, () => console.log('Server Running on Port 3000!'));
 
-const delay = require('delay');
+import delay from 'delay';
 const fs = require('fs');
 const { getProductFromSupplier } = require('./functions/supplierAPI');
 const { createAuth, getAllProductsFromShopify, updateProductFromShopify, createProductToShopify } = require('./functions/shopifyAPI');
