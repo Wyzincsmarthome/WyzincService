@@ -5,7 +5,7 @@ async function createProductToShopify(shopifyClient, product) {
         data: {
             product: {
                 title: product.name,
-                body_html: product.description,
+                body_html: product.short_description + "\n \n" + product.description,
                 product_type: product.family,
                 status: 'active',
                 variants: [
