@@ -40,7 +40,16 @@ async function executeAsyncTask () {
         let tempShopifyProduct = shopifyProductsList.find((shopifyProduct) => shopifyProduct.variants[0].sku === productEAN);
 
         /* > Criar ou Atualizar Produto na Shopify */
-        (tempShopifyProduct) ? await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier) : await createProductToShopify(shopifyClient, productFromSupplier);
+
+        if(tempShopifyProduct) {
+            console.log("> U".blue);
+            await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier);
+        } else {
+            console.log("> C".blue);
+            await createProductToShopify(shopifyClient, productFromSupplier);
+        }
+        
+        //(tempShopifyProduct) ? await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier) : await createProductToShopify(shopifyClient, productFromSupplier);
     }
     
     /* > 'Esvaziar' Variáveis */
