@@ -12,14 +12,6 @@ const fs = require('fs');
 const { getProductFromSupplier } = require('./functions/supplierAPI');
 const { createAuth, getAllProductsFromShopify, updateProductFromShopify, createProductToShopify } = require('./functions/shopifyAPI');
 
-function sleep(time, callback) {
-    var stop = new Date().getTime();
-    while(new Date().getTime() < stop + time) {
-        ;
-    }
-    callback();
-}
-
 async function executeAsyncTask () {
     /* > Criar Cliente Shopify */
     let shopifyClient = await createAuth();
@@ -49,7 +41,6 @@ async function executeAsyncTask () {
 
         /* > Criar ou Atualizar Produto na Shopify */      
         (tempShopifyProduct) ? await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier) : await createProductToShopify(shopifyClient, productFromSupplier);
-        sleep(1000, function() { console.log("") });
     }
     
     /* > 'Esvaziar' Variáveis */
