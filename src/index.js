@@ -1,4 +1,4 @@
-require('dotenv').config();
+ERRO:Drequire('dotenv').config();
 require('colors');
 
 // Para usar render sem precisar pagar:
