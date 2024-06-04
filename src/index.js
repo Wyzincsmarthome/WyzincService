@@ -1,4 +1,4 @@
-ERRO:Drequire('dotenv').config();
+require('dotenv').config();
 require('colors');
 
 // Para usar render sem precisar pagar:
@@ -53,4 +53,4 @@ executeAsyncTask();
 setInterval(function(){
     executeAsyncTask();
     console.log("> - - - - - - - - - - - - - <");
-}, 1000 * 60 * 60); //1h
+}, 1000 * 60 * 60 * 3); //3h
