@@ -9,7 +9,7 @@ async function getAllProductsFromShopify(shopifyClient) {
 
     for(let i = 1; i <= totalPages; i++) {
         (i === 1)
-            ? response = await shopifyClient.get("/products")
+            ? response = await shopifyClient.get("/products", { searchParams: { limit: 250 } })
             : response = await shopifyClient.get("/products", { searchParams: { limit: 250, since_id: parseInt(finalResult[finalResult.length - 1].id) } });
 
         (response) ? responseResult = await response.json() : responseResult = null;
