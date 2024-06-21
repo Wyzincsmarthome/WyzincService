@@ -1,6 +1,12 @@
 require('colors');
 
 async function createProductToShopify(shopifyClient, product) {
+    let imageList = product.images.map((image) => {
+        return {
+            src: image
+        }
+    });
+    
     const response = await shopifyClient.post(`/products`, {
         data: {
             product: {
@@ -15,12 +21,7 @@ async function createProductToShopify(shopifyClient, product) {
                         position: 1,
                     }
                 ],
-                images: product.images.map((image) => {
-                    return {
-                        src: image.url,
-                        position: image.position
-                    }
-                })
+                images: imageList
             }
         }
     });
