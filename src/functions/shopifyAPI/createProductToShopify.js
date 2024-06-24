@@ -27,7 +27,7 @@ async function createProductToShopify(shopifyClient, product) {
     });
 
     if(response) {
-        console.log(`> O Produto com EAN ${product.ean} foi atualizado!`.green);
+        console.log(`> O Produto com EAN ${product.ean} foi criado!`.green);
     } else {
         console.log("========================================".yellow);
         console.log("ERRO (updateProduct) [EAN: ".yellow + product.ean.yellow + "]: ".yellow);
