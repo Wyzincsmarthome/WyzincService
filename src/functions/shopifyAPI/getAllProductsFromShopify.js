@@ -17,7 +17,7 @@ async function getAllProductsFromShopify(shopifyClient) {
         finalResult.push(...responseResult.products);
     }
 
-    console.log(`Nº Produtos: ${finalResult.length}`)
+    console.log(`Nº Produtos (após /products): ${finalResult.length} // Nº Total (/products/count): ${numProducts.count}`);
     return finalResult;
 }
 
