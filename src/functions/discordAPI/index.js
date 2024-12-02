@@ -1,0 +1,1 @@
+exports.sendMessage = require('./sendMessage.js');

@@ -7,10 +7,10 @@ const app = express();
 app.get('/', (req, res) => { res.send('Hello World!') });
 app.listen(3000, () => console.log('Server Running on Port 3000!'));
 
-
 const fs = require('fs');
 const { getProductFromSupplier } = require('./functions/supplierAPI');
 const { createAuth, getAllProductsFromShopify, updateProductFromShopify, createProductToShopify } = require('./functions/shopifyAPI');
+const { sendMessage } = require('./functions/discordAPI');
 
 async function executeAsyncTask () {
     /* > Criar Cliente Shopify */
@@ -31,7 +31,7 @@ async function executeAsyncTask () {
 
         /* > Descobrir se o Produto existe no Fornecedor (pelo EAN) */
         let productFromSupplier = await getProductFromSupplier(productEAN);
-        if(!productFromSupplier) { console.log(`> O Produto com EAN ${productEAN}, não existe no Fornecedor!`.red); continue; }
+        if(!productFromSupplier) { console.log(`> O Produto com EAN ${productEAN}, não existe no Fornecedor!`.red); sendMessage(productEAN); continue; }
 
         /* > Obter Preço Final Formatado do Produto (pelo Custom Price ou Sugestão do Fornecedor) */
         productFromSupplier.optFinalPrice = (productCustomPrice) ? formattedPrice = parseFloat(productCustomPrice.replace(/\,/g,''), 10) : formattedPrice = parseFloat(productFromSupplier.pvpr.replace(/\,/g,''), 10);
@@ -43,7 +43,7 @@ async function executeAsyncTask () {
         (tempShopifyProduct) ? await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier) : await createProductToShopify(shopifyClient, productFromSupplier);
     }
     
-    /* > 'Esvaziar' Variáveis */
+    /* > 'Limpar' Variáveis */
     shopifyClient = null;
     EANProductsList = null;
     shopifyProductsList = null;
