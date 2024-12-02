@@ -29,18 +29,22 @@ async function executeAsyncTask () {
         let productEAN = productInfo.split('/')[0];
         let productCustomPrice = productInfo.split('/')[1] || null;
 
-        /* > Descobrir se o Produto existe no Fornecedor (pelo EAN) */
-        let productFromSupplier = await getProductFromSupplier(productEAN);
-        if(!productFromSupplier) { console.log(`> O Produto com EAN ${productEAN}, não existe no Fornecedor!`.red); sendMessage(productEAN); continue; }
+        try {    
+            /* > Descobrir se o Produto existe no Fornecedor (pelo EAN) */
+            let productFromSupplier = await getProductFromSupplier(productEAN);
+            if(!productFromSupplier) { console.log(`> O Produto com EAN ${productEAN}, não existe no Fornecedor!`.red); sendMessage(productEAN); continue; }
 
-        /* > Obter Preço Final Formatado do Produto (pelo Custom Price ou Sugestão do Fornecedor) */
-        productFromSupplier.optFinalPrice = (productCustomPrice) ? formattedPrice = parseFloat(productCustomPrice.replace(/\,/g,''), 10) : formattedPrice = parseFloat(productFromSupplier.pvpr.replace(/\,/g,''), 10);
+            /* > Obter Preço Final Formatado do Produto (pelo Custom Price ou Sugestão do Fornecedor) */
+            productFromSupplier.optFinalPrice = (productCustomPrice) ? formattedPrice = parseFloat(productCustomPrice.replace(/\,/g,''), 10) : formattedPrice = parseFloat(productFromSupplier.pvpr.replace(/\,/g,''), 10);
 
-        /* > Verificar se o Produto existe na Shopify (pelo EAN) */
-        let tempShopifyProduct = shopifyProductsList.find((shopifyProduct) => shopifyProduct.variants[0].sku === productEAN);
+            /* > Verificar se o Produto existe na Shopify (pelo EAN) */
+            let tempShopifyProduct = shopifyProductsList.find((shopifyProduct) => shopifyProduct.variants[0].sku === productEAN);
 
-        /* > Criar ou Atualizar Produto na Shopify */      
-        (tempShopifyProduct) ? await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier) : await createProductToShopify(shopifyClient, productFromSupplier);
+            /* > Criar ou Atualizar Produto na Shopify */      
+            (tempShopifyProduct) ? await updateProductFromShopify(shopifyClient, tempShopifyProduct, productFromSupplier) : await createProductToShopify(shopifyClient, productFromSupplier);
+        } catch (error) {
+            console.log(`> Erro ao processar o EAN ${productEAN}!`.red);
+        }
     }
     
     /* > 'Limpar' Variáveis */
