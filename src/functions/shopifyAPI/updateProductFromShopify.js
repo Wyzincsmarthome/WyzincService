@@ -1,6 +1,16 @@
 require('colors');
+const { msgChangeStock } = require('../discordAPI');
 
 async function updateProductFromWix(shopifyClient, shopifyProduct, product) {
+    let shopifyStock = shopifyProduct.variants[0].inventory_quantity;
+    let apiStock = product.stock;
+
+    console.log('- - - - - - - - -')
+    console.log('Stock na Shopify: '.yellow + shopifyStock.toString().yellow);
+    console.log('Stock no Fornecedor: '.yellow + apiStock.toString().yellow);
+
+    if((apiStock.startsWith('Disponível') || apiStock.startsWith('Stock Reduzido')) && shopifyStock === 0) msgChangeStock(product.ean, 'O Fornecedor atualmente tem o produto em Stock!');
+    if((apiStock === 'Esgotado' || apiStock === 'Brevemente') && shopifyStock > 0) msgChangeStock(product.ean, 'O Fornecedor atualmente não tem o produto em Stock!');
 
     let productVariants = shopifyProduct.variants.map((variant) => {
         return {
