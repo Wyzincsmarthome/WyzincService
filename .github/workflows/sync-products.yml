@@ -1,0 +1,56 @@
+name: WyzincService - Sincronização Automática de Stock
+
+on:
+  schedule:
+    # Executa a cada 3 horas (0 */3 * * *)
+    - cron: '0 */3 * * *'
+  workflow_dispatch: # Permite execução manual
+
+jobs:
+  sync-products:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Instalar dependências
+      run: npm install
+      
+    - name: Configurar variáveis de ambiente
+      env:
+        API_USER: ${{ secrets.API_USER }}
+        API_PASSWORD: ${{ secrets.API_PASSWORD }}
+        API_TOKEN: ${{ secrets.API_TOKEN }}
+        SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
+        SHOPIFY_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ACCESS_TOKEN }}
+        DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      run: |
+        echo "API_USER=$API_USER" >> .env
+        echo "API_PASSWORD=$API_PASSWORD" >> .env
+        echo "API_TOKEN=$API_TOKEN" >> .env
+        echo "SHOPIFY_STORE_URL=$SHOPIFY_STORE_URL" >> .env
+        echo "SHOPIFY_ACCESS_TOKEN=$SHOPIFY_ACCESS_TOKEN" >> .env
+        echo "DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL" >> .env
+        
+    - name: Executar sincronização de produtos
+      run: |
+        echo "🚀 Iniciando sincronização de produtos..."
+        echo "⏰ Timestamp: $(date)"
+        node src/index.js
+        
+    - name: Upload logs (em caso de erro)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: sync-logs-${{ github.run_number }}
+        path: |
+          *.log
+          logs/
+        retention-days: 7
