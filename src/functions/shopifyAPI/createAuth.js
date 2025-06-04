@@ -1,4 +1,4 @@
-require('dotenv').config(); // ← Adicionar esta linha
+require('dotenv').config();
 
 const { createAdminRestApiClient } = require('@shopify/admin-api-client');
 
