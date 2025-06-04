@@ -1,15 +1,22 @@
-require('dotenv').config();
+require('dotenv').config(); // ← Adicionar esta linha
 
 const { createAdminRestApiClient } = require('@shopify/admin-api-client');
 
-async function createAuth() {
-    let shopifyClient = createAdminRestApiClient({
-        storeDomain: process.env.SHOPIFY_STORE_DOMAIN,
-        apiVersion: process.env.SHOPIFY_API_VERSION,
-        accessToken: process.env.SHOPIFY_ACCESS_TOKEN
-    });
+function createAuth() {
+    console.log('🔍 DEBUG createAuth - SHOPIFY_STORE_URL:', process.env.SHOPIFY_STORE_URL);
     
-    return shopifyClient;
+    // Extrair apenas o domínio da URL completa
+    const storeUrl = process.env.SHOPIFY_STORE_URL;
+    const storeDomain = storeUrl ? storeUrl.replace('https://', '' ).replace('http://', '' ) : undefined;
+    
+    console.log('🔍 DEBUG createAuth - storeDomain:', storeDomain);
+    
+    const client = createAdminRestApiClient({
+        storeDomain: storeDomain,
+        apiVersion: '2023-04',
+        accessToken: process.env.SHOPIFY_ACCESS_TOKEN,
+    });
+    return client;
 }
 
 module.exports = createAuth;
