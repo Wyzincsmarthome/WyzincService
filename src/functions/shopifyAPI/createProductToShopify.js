@@ -159,7 +159,7 @@ async function createProductToShopify(shopifyClient, product) {
                         inventoryQuantities: [
                             {
                                 availableQuantity: tempStock,
-                                locationId: "gid://shopify/Location/YOUR_LOCATION_ID" // Substituir pelo ID real
+                                locationId: "gid://shopify/Location/84623851786" // Substituir pelo ID real
                             }
                         ]
                     }
