@@ -8,14 +8,14 @@ function generateProductTags(product) {
     let brandTag = '';
     if (product.brand) {
         // Lógica especial para Yeelight
-        if (product.brand.toLowerCase() === 'xiaomi' && 
-            product.name && product.name.toLowerCase().includes('yeelight')) {
+        if ((product.brand.toLowerCase() === 'xiaomi' && 
+             product.name && product.name.toLowerCase().includes('yeelight')) {
             brandTag = 'Yeelight';
         } else {
             // Mapear marcas conhecidas
             const brandMap = {
                 'xiaomi': 'Xiaomi',
-                'baseus': 'Baseus', 
+                'baseus': 'Baseus',
                 'torras': 'Torras',
                 'apple': 'Apple',
                 'hutt': 'Hutt',
@@ -26,58 +26,58 @@ function generateProductTags(product) {
         }
         if (brandTag) tags.push(brandTag);
     }
-    
+
     // 2. TAG DE SUB-CATEGORIA (baseada no título)
     let categoryTag = '';
     const productName = (product.name || '').toLowerCase();
     
     // Verificar categorias específicas por ordem de prioridade
-    if (productName.includes('aspirador robô') || productName.includes('robot vacuum')) {
+    if ((productName.includes('aspirador robô') || productName.includes('robot vacuum')) {
         categoryTag = 'Aspirador Robô';
     } else if (productName.includes('aspirador vertical')) {
         categoryTag = 'Aspirador Vertical';
     } else if (productName.includes('mini aspirador')) {
         categoryTag = 'Mini Aspirador';
-    } else if (productName.includes('câmara') || productName.includes('camera') || productName.includes('webcam')) {
+    } else if ((productName.includes('câmara') || productName.includes('camera') || productName.includes('webcam')) {
         categoryTag = 'Câmaras';
     } else if (productName.includes('sensor')) {
-        categoryTag = 'Sensores inteligentes';
-    } else if (productName.includes('fechadura') || productName.includes('lock')) {
+        categoryTag = 'Sensores Inteligentes';
+    } else if ((productName.includes('fechadura') || productName.includes('lock')) {
         categoryTag = 'Fechaduras Inteligentes';
-    } else if (productName.includes('tomada') || productName.includes('socket') || productName.includes('plug')) {
+    } else if ((productName.includes('tomada') || productName.includes('socket') || productName.includes('plug')) {
         categoryTag = 'Tomadas';
-    } else if (productName.includes('controlo remoto') || productName.includes('comando') || productName.includes('remote control')) {
+    } else if ((productName.includes('controlo remoto') || productName.includes('comando') || productName.includes('remote'))) {
         categoryTag = 'Controlo Remoto';
-    } else if (productName.includes('iluminação') || productName.includes('luz') || productName.includes('lâmpada') || 
-               productName.includes('light') || productName.includes('lamp')) {
+    } else if ((productName.includes('iluminação') || productName.includes('luz') || productName.includes('lamp') || 
+               productName.includes('light') || productName.includes('lamp'))) {
         categoryTag = 'Iluminação';
-    } else if (productName.includes('cortina') || productName.includes('curtain')) {
+    } else if ((productName.includes('cortina') || productName.includes('curtain')) {
         categoryTag = 'Motor Cortinas';
-    } else if (productName.includes('campainha') || productName.includes('doorbell')) {
+    } else if ((productName.includes('campainha') || productName.includes('doorbell')) {
         categoryTag = 'Campainha Inteligente';
-    } else if (productName.includes('interruptor') || productName.includes('switch')) {
+    } else if ((productName.includes('interruptor') || productName.includes('switch')) {
         categoryTag = 'Interruptor Inteligente';
-    } else if (productName.includes('hub') || productName.includes('gateway')) {
+    } else if ((productName.includes('hub') || productName.includes('gateway')) {
         categoryTag = 'Hubs Inteligentes';
-    } else if (productName.includes('assistente') || productName.includes('alexa') || productName.includes('google')) {
+    } else if ((productName.includes('assistente') || productName.includes('alexa') || productName.includes('google'))) {
         categoryTag = 'Assistentes Virtuais';
-    } else if (productName.includes('painel') || productName.includes('panel')) {
+    } else if (productName.includes('painel')) {
         categoryTag = 'Painel Controlo';
-    } else if (productName.includes('acessório') && productName.includes('aspirador')) {
+    } else if ((productName.includes('acessório') && productName.includes('aspirador')) {
         categoryTag = 'Acessórios Aspiradores';
+    } else if ((productName.includes('inteligente') || productName.includes('smart')) {
+        categoryTag = 'Gadgets Inteligentes';
     } else {
         // Fallback inteligente
         if (product.brand && product.brand.toLowerCase() === 'petkit') {
             categoryTag = 'Gadgets P/ Animais';
-        } else if (productName.includes('inteligente') || productName.includes('smart')) {
-            categoryTag = 'Gadgets Inteligentes';
         } else {
             categoryTag = 'Gadgets Diversos';
         }
     }
-    
+
     if (categoryTag) tags.push(categoryTag);
-    
+
     console.log('🏷️ Tags geradas para', product.name, ':', tags);
     return tags;
 }
@@ -95,7 +95,7 @@ async function createProductToShopify(shopifyClient, product) {
     switch(product.stock) {
         case 'Disponível ( < 10 UN )':
             tempStock = 9;
-            console.log('✅ Stock mapeado: Disponível < 10 UN → 9 unidades');
+            console.log('✅ Stock mapeado: Disponível ( < 10 UN ) → 9 unidades');
             break;
         case 'Stock Reduzido ( < 2 UN )':
             tempStock = 1;
@@ -107,7 +107,7 @@ async function createProductToShopify(shopifyClient, product) {
             break;
         case 'Brevemente':
             tempStock = 0;
-            console.log('⏳ Stock mapeado: Brevemente → 0 unidades');
+            console.log('❌ Stock mapeado: Brevemente → 0 unidades');
             break;
         case 'Esgotado':
             tempStock = 0;
@@ -115,9 +115,13 @@ async function createProductToShopify(shopifyClient, product) {
             break;
         default:
             tempStock = 10;
-            console.log('🔄 Stock mapeado: Default (' + product.stock + ') → 10 unidades');
+            console.log('📦 Stock mapeado: Default (' + product.stock + ') → 10 unidades');
             break;
     }
+
+    // Preparar array de imagens corrigido
+    const imageList = product.images && Array.isArray(product.images) ? 
+        product.images.map(img => ({ src: img })) : [];
 
     const response = await shopifyClient.post('/products', {
         data: {
@@ -143,13 +147,14 @@ async function createProductToShopify(shopifyClient, product) {
     });
 
     if(response) {
-        console.log('> 0 Produto com EAN ${product.ean} foi criado!'.green);
+        console.log('✅ Produto com EAN $' + product.ean + ' foi criado!'.green);
     } else {
         console.log("=".repeat(50).yellow);
-        console.log("ERRO (updateProduct) [EAN: ".yellow + product.ean.yellow + "]: ".yellow);
+        console.log("ERRO (updateProduct) [EAN: " + product.ean + " ]: " + product.ean);
         console.log(error.message.yellow);
         console.log("=".repeat(50).yellow);
     }
 }
 
 module.exports = createProductToShopify;
+
