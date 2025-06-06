@@ -48,7 +48,7 @@ function generateProductTags(product) {
         categoryTag = 'Mini Aspirador';
     } else if (productName.includes('aspirador') || productFamily.includes('aspiração')) {
         categoryTag = 'Aspiradores';
-    } else if (productName.includes('smart tv') || productName.includes('televisão') || productFamily.includes('tvs') || productName.includes(' tv ')) {
+    } else if (productName.includes('smart tv') || productName.includes('televisão') || productFamily.includes('tvs') || productName.includes(' tv ') || productName.includes('qled') || productName.includes('oled')) {
         categoryTag = 'TVs';  // CORREÇÃO: Priorizar TVs antes de assistentes
     } else if (productName.includes('câmara') || productName.includes('camera') || productName.includes('webcam')) {
         categoryTag = 'Câmaras';
@@ -91,6 +91,71 @@ function generateProductTags(product) {
     
     console.log('🏷️ Tags geradas para', product.name || 'produto sem nome', ':', tags);
     return tags;
+}
+
+// Função para processar preços CORRIGIDA
+function processProductPrices(product) {
+    console.log('💰 Processando preços...');
+    console.log('   • Preço original (price):', product.price);
+    console.log('   • PVP original (pvpr):', product.pvpr);
+    
+    // CORREÇÃO DEFINITIVA: Múltiplas tentativas de parsing
+    let costPrice = 0;
+    let retailPrice = 0;
+    
+    // Processar preço de custo
+    if (product.price) {
+        const priceStr = String(product.price);
+        console.log('   • Processando price string:', JSON.stringify(priceStr));
+        
+        // Tentar diferentes métodos de parsing
+        const cleanPrice1 = priceStr.replace(',', '.');  // "1,004.05" → "1004.05"
+        const cleanPrice2 = priceStr.replace(/,/g, '.');  // Substituir todas as vírgulas
+        const cleanPrice3 = priceStr.replace(/[^0-9.,]/g, '').replace(',', '.'); // Remover caracteres não numéricos
+        
+        console.log('   • cleanPrice1:', cleanPrice1);
+        console.log('   • cleanPrice2:', cleanPrice2);
+        console.log('   • cleanPrice3:', cleanPrice3);
+        
+        costPrice = parseFloat(cleanPrice3) || parseFloat(cleanPrice2) || parseFloat(cleanPrice1) || 0;
+        console.log('   • Preço de custo final:', costPrice);
+    }
+    
+    // Processar PVP
+    if (product.pvpr) {
+        const pvprStr = String(product.pvpr);
+        console.log('   • Processando pvpr string:', JSON.stringify(pvprStr));
+        
+        // Tentar diferentes métodos de parsing
+        const cleanPvpr1 = pvprStr.replace(',', '.');
+        const cleanPvpr2 = pvprStr.replace(/,/g, '.');
+        const cleanPvpr3 = pvprStr.replace(/[^0-9.,]/g, '').replace(',', '.');
+        
+        console.log('   • cleanPvpr1:', cleanPvpr1);
+        console.log('   • cleanPvpr2:', cleanPvpr2);
+        console.log('   • cleanPvpr3:', cleanPvpr3);
+        
+        retailPrice = parseFloat(cleanPvpr3) || parseFloat(cleanPvpr2) || parseFloat(cleanPvpr1) || costPrice;
+        console.log('   • PVP final:', retailPrice);
+    } else {
+        retailPrice = costPrice;
+    }
+    
+    // Validação final
+    if (costPrice <= 0) {
+        console.log('⚠️ Preço de custo inválido, usando 1€');
+        costPrice = 1;
+    }
+    if (retailPrice <= 0) {
+        console.log('⚠️ PVP inválido, usando preço de custo');
+        retailPrice = costPrice;
+    }
+    
+    console.log('💰 Preços finais processados:');
+    console.log('   • Preço de custo:', costPrice + '€');
+    console.log('   • PVP (preço de venda):', retailPrice + '€');
+    
+    return { costPrice, retailPrice };
 }
 
 // Função para obter produtos da Shopify via REST API
@@ -183,7 +248,6 @@ async function getAllProductsFromShopify(shopifyClient) {
         const productsListContent = fs.readFileSync(productsListPath, 'utf8');
         console.log('📄 Lendo lista de EANs...');
         console.log('📄 Conteúdo (primeiros 200 chars):', productsListContent.substring(0, 200));
-        console.log('📄 Conteúdo completo para debug:', JSON.stringify(productsListContent));
         
         let localEANs;
         try {
@@ -257,13 +321,38 @@ async function getAllProductsFromShopify(shopifyClient) {
             // CORREÇÃO: Verificar se produto já existe na Shopify (allProducts é garantidamente array)
             const existingProduct = allProducts.find(shopifyProduct => {
                 return shopifyProduct.variants && shopifyProduct.variants.some(variant => 
-                    variant.sku === ean
+                    variant.sku === ean || variant.barcode === ean
                 );
             });
             
             if (existingProduct) {
-                console.log('✅ Produto já existe na Shopify (SKU: ' + ean + ') - ignorando');
-                skippedCount++;
+                console.log('🔄 Produto já existe na Shopify (SKU/EAN: ' + ean + ') - atualizando...');
+                
+                try {
+                    // Obter dados atualizados da API Suprides
+                    const getProductFromSupplier = require('../supplierAPI/getProductFromSupplier');
+                    console.log('🔍 Consultando API Suprides para atualização do EAN:', ean);
+                    const productData = await getProductFromSupplier(ean);
+                    
+                    if (!productData) {
+                        console.log('❌ Produto não encontrado na API Suprides para EAN:', ean);
+                        errorCount++;
+                        continue;
+                    }
+                    
+                    console.log('✅ Dados obtidos da Suprides para atualização:', productData.name || 'Nome não disponível');
+                    
+                    // Atualizar produto existente
+                    await updateProductViaREST(restClient, existingProduct, productData);
+                    successCount++;
+                    console.log('✅ Produto atualizado com sucesso na Shopify!');
+                    
+                } catch (updateError) {
+                    errorCount++;
+                    console.log('❌ Erro ao atualizar produto EAN ' + ean + ':', updateError.message);
+                }
+                
+                skippedCount++; // Contar como processado mas não criado
                 continue;
             }
             
@@ -326,17 +415,20 @@ async function getAllProductsFromShopify(shopifyClient) {
     }
 }
 
-// Função para criar produto via REST API CORRIGIDA
-async function createProductViaREST(restClient, product) {
+// Função para atualizar produto via REST API
+async function updateProductViaREST(restClient, existingProduct, productData) {
     try {
-        console.log('🚀 Criando produto via REST API:', product.name);
+        console.log('🔄 Atualizando produto via REST API:', productData.name);
+        
+        // Processar preços CORRIGIDOS
+        const { costPrice, retailPrice } = processProductPrices(productData);
         
         // Gerar tags automáticas CORRIGIDAS
-        const tags = generateProductTags(product);
+        const tags = generateProductTags(productData);
         
         // Mapear stock
         let inventory_quantity = 0;
-        switch(product.stock) {
+        switch(productData.stock) {
             case 'Disponível ( < 10 UN )':
             case 'Disponível ( < 10 Un )':
                 inventory_quantity = 9;
@@ -350,82 +442,18 @@ async function createProductViaREST(restClient, product) {
                 break;
         }
         
-        // CORREÇÃO: Preços com vírgulas (formato português)
-        const costPriceStr = (product.price || '0').replace(',', '.');  // "1,004.05" → "1004.05"
-        const retailPriceStr = (product.pvpr || '0').replace(',', '.');  // "1,299.99" → "1299.99"
-        
-        const costPrice = parseFloat(costPriceStr) || 0;
-        const retailPrice = parseFloat(retailPriceStr) || costPrice;
-        
-        console.log('💰 Preços processados:');
-        console.log('   • Preço original (price):', product.price);
-        console.log('   • PVP original (pvpr):', product.pvpr);
-        console.log('   • Preço de custo processado:', costPrice + '€');
-        console.log('   • PVP processado:', retailPrice + '€');
-        console.log('   • Usando como preço de venda:', retailPrice + '€');
-        
-        // Preparar dados do produto para REST API
-        const productData = {
+        // Atualizar produto
+        const productUpdateData = {
             product: {
-                title: product.name,
-                body_html: (product.short_description || '') + "\\n\\n" + (product.description || ''),
-                vendor: product.brand || '',
-                product_type: product.family || '',
-                tags: tags.join(', '),
-                status: 'active',
-                variants: [
-                    {
-                        price: retailPrice.toFixed(2),  // CORREÇÃO: Usar PVP como preço de venda
-                        compare_at_price: null,  // Pode ser usado para preço riscado
-                        cost: costPrice.toFixed(2),  // CORREÇÃO: Preço de custo
-                        sku: product.ean,  // SKU continua a ser o EAN
-                        barcode: product.ean,  // CORREÇÃO: EAN no campo barcode
-                        inventory_management: 'shopify',
-                        inventory_policy: 'deny',
-                        inventory_quantity: inventory_quantity
-                    }
-                ]
+                id: existingProduct.id,
+                title: productData.name,
+                body_html: (productData.short_description || '') + "\\n\\n" + (productData.description || ''),
+                vendor: productData.brand || '',
+                product_type: productData.family || '',
+                tags: tags.join(', ')
             }
         };
         
-        // Adicionar imagens se existirem
-        if (product.images && Array.isArray(product.images) && product.images.length > 0) {
-            productData.product.images = product.images.map((img, index) => ({
-                src: img,
-                alt: `${product.name} - Imagem ${index + 1}`
-            }));
-        }
-        
-        console.log('📤 Enviando produto via REST API...');
-        console.log('   • Título:', productData.product.title);
-        console.log('   • Preço de venda (PVP):', productData.product.variants[0].price + '€');
-        console.log('   • Preço de custo:', productData.product.variants[0].cost + '€');
-        console.log('   • SKU:', productData.product.variants[0].sku);
-        console.log('   • EAN (barcode):', productData.product.variants[0].barcode);
-        console.log('   • Stock:', productData.product.variants[0].inventory_quantity);
-        console.log('   • Tags:', productData.product.tags);
-        console.log('   • Imagens:', productData.product.images ? productData.product.images.length : 0);
-        
-        const response = await restClient.post('/products.json', productData);
-        
-        if (response.data && response.data.product) {
-            console.log('✅ Produto criado com sucesso via REST API!');
-            console.log('   • ID:', response.data.product.id);
-            console.log('   • Handle:', response.data.product.handle);
-            console.log('   • Tags aplicadas:', response.data.product.tags);
-            console.log('   • Preço final:', response.data.product.variants[0].price + '€');
-            return response.data.product;
-        } else {
-            throw new Error('Resposta inválida da REST API');
-        }
-        
-    } catch (error) {
-        console.log('❌ Erro na criação via REST API:', error.message);
-        if (error.response && error.response.data) {
-            console.log('📄 Detalhes do erro:', JSON.stringify(error.response.data, null, 2));
-        }
-        throw error;
-    }
-}
-
-module.exports = getAllProductsFromShopify;
+        console.log('📤 Atualizando produto via REST API...');
+        console.log('   • ID:', existingProduct.id);
+        conso
