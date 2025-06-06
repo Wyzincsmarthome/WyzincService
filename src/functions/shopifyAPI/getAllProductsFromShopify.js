@@ -33,7 +33,7 @@ function generateProductTags(product) {
         if (brandTag) tags.push(brandTag);
     }
     
-    // 2. TAG DE SUB-CATEGORIA CORRIGIDA (baseada no título E descrição)
+    // 2. TAG DE SUB-CATEGORIA CORRIGIDA
     let categoryTag = '';
     const productName = (product.name || '').toLowerCase();
     const productDescription = (product.description || '').toLowerCase();
@@ -43,11 +43,13 @@ function generateProductTags(product) {
     if (productName.includes('aspirador robô') || productName.includes('robot vacuum') || productName.includes('mi robot')) {
         categoryTag = 'Aspirador Robô';
     } else if (productName.includes('aspirador vertical') || productDescription.includes('aspirador vertical') || productDescription.includes('tipo aspirador vertical')) {
-        categoryTag = 'Aspirador Vertical';  // CORREÇÃO: Esta era a tag que faltava!
+        categoryTag = 'Aspirador Vertical';
     } else if (productName.includes('mini aspirador')) {
         categoryTag = 'Mini Aspirador';
     } else if (productName.includes('aspirador') || productFamily.includes('aspiração')) {
-        categoryTag = 'Aspiradores';  // Fallback para aspiradores genéricos
+        categoryTag = 'Aspiradores';
+    } else if (productName.includes('smart tv') || productName.includes('televisão') || productFamily.includes('tvs') || productName.includes(' tv ')) {
+        categoryTag = 'TVs';  // CORREÇÃO: Priorizar TVs antes de assistentes
     } else if (productName.includes('câmara') || productName.includes('camera') || productName.includes('webcam')) {
         categoryTag = 'Câmaras';
     } else if (productName.includes('sensor')) {
@@ -68,8 +70,8 @@ function generateProductTags(product) {
         categoryTag = 'Interruptor Inteligente';
     } else if (productName.includes('hub') || productName.includes('gateway')) {
         categoryTag = 'Hubs Inteligentes';
-    } else if (productName.includes('assistente') || productName.includes('alexa') || productName.includes('google')) {
-        categoryTag = 'Assistentes Virtuais';
+    } else if (productName.includes('assistente virtual') || productName.includes('alexa') || productName.includes('google assistant')) {
+        categoryTag = 'Assistentes Virtuais';  // CORREÇÃO: Só para assistentes reais, não TVs com Google TV
     } else if (productName.includes('painel')) {
         categoryTag = 'Painel Controlo';
     } else if (productName.includes('acessório') && productName.includes('aspirador')) {
@@ -81,7 +83,7 @@ function generateProductTags(product) {
         if (product.brand && product.brand.toLowerCase() === 'petkit') {
             categoryTag = 'Gadgets P/ Animais';
         } else {
-            categoryTag = 'Gadgets Diversos';
+            categoryTag = 'Gadgets Diversos';  // CORREÇÃO: Fallback para produtos que não se enquadram
         }
     }
     
@@ -183,9 +185,21 @@ async function getAllProductsFromShopify(shopifyClient) {
         
         let localEANs;
         try {
-            localEANs = JSON.parse(productsListContent);
+            // CORREÇÃO: Suportar formato simples (um EAN por linha) E formato JSON
+            if (productsListContent.trim().startsWith('[')) {
+                // Formato JSON (compatibilidade com formato atual)
+                console.log('📄 Detectado formato JSON');
+                localEANs = JSON.parse(productsListContent);
+            } else {
+                // Formato simples (um EAN por linha) - NOVO FORMATO PREFERIDO
+                console.log('📄 Detectado formato simples (um EAN por linha)');
+                localEANs = productsListContent
+                    .split('\\n')
+                    .map(line => line.trim())
+                    .filter(line => line && line.length > 0 && /^[0-9]+$/.test(line)); // Só números
+            }
         } catch (parseError) {
-            console.error('❌ Erro ao fazer parse do JSON:', parseError.message);
+            console.error('❌ Erro ao fazer parse:', parseError.message);
             console.error('📄 Conteúdo completo:', productsListContent);
             throw new Error('Erro ao fazer parse do productsList.txt: ' + parseError.message);
         }
@@ -209,7 +223,7 @@ async function getAllProductsFromShopify(shopifyClient) {
             processedCount++;
             
             // VALIDAÇÃO: Verificar se EAN é válido
-            if (!ean || typeof ean !== 'string') {
+            if (!ean || typeof ean !== 'string' || !/^[0-9]+$/.test(ean)) {
                 console.log('⚠️ EAN ' + processedCount + ' inválido - ignorando:', ean);
                 skippedCount++;
                 continue;
@@ -313,13 +327,18 @@ async function createProductViaREST(restClient, product) {
                 break;
         }
         
-        // CORREÇÃO: Preços corretos
-        const costPrice = parseFloat(product.price) || 0;  // Preço de custo (134.30)
-        const retailPrice = parseFloat(product.pvpr) || costPrice;  // PVP (199.99)
+        // CORREÇÃO: Preços com vírgulas (formato português)
+        const costPriceStr = (product.price || '0').replace(',', '.');  // "1,004.05" → "1004.05"
+        const retailPriceStr = (product.pvpr || '0').replace(',', '.');  // "1,299.99" → "1299.99"
+        
+        const costPrice = parseFloat(costPriceStr) || 0;
+        const retailPrice = parseFloat(retailPriceStr) || costPrice;
         
         console.log('💰 Preços processados:');
-        console.log('   • Preço de custo (price):', costPrice + '€');
-        console.log('   • PVP (pvpr):', retailPrice + '€');
+        console.log('   • Preço original (price):', product.price);
+        console.log('   • PVP original (pvpr):', product.pvpr);
+        console.log('   • Preço de custo processado:', costPrice + '€');
+        console.log('   • PVP processado:', retailPrice + '€');
         console.log('   • Usando como preço de venda:', retailPrice + '€');
         
         // Preparar dados do produto para REST API
