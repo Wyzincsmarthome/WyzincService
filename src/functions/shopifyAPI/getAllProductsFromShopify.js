@@ -183,6 +183,7 @@ async function getAllProductsFromShopify(shopifyClient) {
         const productsListContent = fs.readFileSync(productsListPath, 'utf8');
         console.log('📄 Lendo lista de EANs...');
         console.log('📄 Conteúdo (primeiros 200 chars):', productsListContent.substring(0, 200));
+        console.log('📄 Conteúdo completo para debug:', JSON.stringify(productsListContent));
         
         let localEANs;
         try {
@@ -194,17 +195,25 @@ async function getAllProductsFromShopify(shopifyClient) {
             } else {
                 // Formato simples (um EAN por linha) - NOVO FORMATO PREFERIDO
                 console.log('📄 Detectado formato simples (um EAN por linha)');
-                localEANs = productsListContent
-                    .split('\\n')
+                
+                // CORREÇÃO: Split correto por quebras de linha
+                const lines = productsListContent
+                    .split(/\r?\n/)  // CORREÇÃO: Split por \n ou \r\n (Windows/Unix)
                     .map(line => line.trim())
-                    .filter(line => {
-                        // CORREÇÃO: Validação mais permissiva
-                        const isValid = line && line.length >= 8 && line.length <= 20 && /^[0-9]+$/.test(line);
-                        if (line && !isValid) {
-                            console.log('⚠️ EAN inválido ignorado:', line, '(comprimento:', line.length, ')');
-                        }
-                        return isValid;
-                    });
+                    .filter(line => line.length > 0);
+                
+                console.log('📄 Linhas após split:', lines);
+                
+                localEANs = lines.filter(line => {
+                    // CORREÇÃO: Validação mais permissiva
+                    const isValid = line && line.length >= 8 && line.length <= 20 && /^[0-9]+$/.test(line);
+                    if (line && !isValid) {
+                        console.log('⚠️ EAN inválido ignorado:', line, '(comprimento:', line.length, ')');
+                    } else if (isValid) {
+                        console.log('✅ EAN válido encontrado:', line);
+                    }
+                    return isValid;
+                });
                 
                 console.log('📄 EANs após validação:', localEANs);
             }
@@ -420,4 +429,3 @@ async function createProductViaREST(restClient, product) {
 }
 
 module.exports = getAllProductsFromShopify;
-            
