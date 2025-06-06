@@ -148,6 +148,64 @@ function processProductPrices(product) {
     return { costPrice, retailPrice };
 }
 
+// NOVA FUNÇÃO: Processar stock do fornecedor corretamente
+function processStock(stockString) {
+    console.log('Processando stock:', stockString);
+    
+    if (!stockString) {
+        console.log('   Stock não definido, definindo como 0');
+        return 0;
+    }
+    
+    const stockLower = stockString.toLowerCase();
+    
+    // Verificar se está sem stock
+    if (
+        stockLower.includes('sem stock') || 
+        stockLower.includes('indisponivel') || 
+        stockLower.includes('indisponível') ||
+        stockLower.includes('esgotado') ||
+        stockLower.includes('ruptura')
+    ) {
+        console.log('   Produto sem stock, definindo como 0');
+        return 0;
+    }
+    
+    // Verificar stock reduzido
+    if (
+        stockLower.includes('reduzido') || 
+        stockLower.includes('< 2') ||
+        stockLower.includes('limitado')
+    ) {
+        console.log('   Stock reduzido, definindo como 1');
+        return 1;
+    }
+    
+    // Verificar stock disponível mas limitado
+    if (
+        stockLower.includes('disponivel') || 
+        stockLower.includes('disponível') ||
+        stockLower.includes('< 10')
+    ) {
+        console.log('   Stock disponível limitado, definindo como 5');
+        return 5;
+    }
+    
+    // Verificar stock abundante
+    if (
+        stockLower.includes('abundante') || 
+        stockLower.includes('> 10') ||
+        stockLower.includes('elevado')
+    ) {
+        console.log('   Stock abundante, definindo como 20');
+        return 20;
+    }
+    
+    // Valor padrão para casos não identificados
+    console.log('   Padrão de stock não reconhecido, definindo como 0 por segurança');
+    return 0;
+}
+
 async function getAllProductsFromShopify(shopifyClient) {
     try {
         console.log('Obtendo produtos da Shopify via REST API...');
@@ -177,39 +235,49 @@ async function getAllProductsFromShopify(shopifyClient) {
         
         console.log('Obtendo produtos via REST API...');
         
+        // CORREÇÃO: Obter TODOS os produtos da loja para evitar duplicação
         let allProducts = [];
         let page = 1;
-        const limit = 250; // Aumentado para obter mais produtos por página
+        const limit = 250; // Máximo permitido pela API
         
         try {
             while (true) {
+                console.log(`Obtendo página ${page} de produtos (${limit} por página)...`);
+                
                 const response = await restClient.get('/products.json', {
                     params: {
                         limit: limit,
                         page: page,
-                        fields: 'id,title,handle,variants'
+                        fields: 'id,title,handle,variants,tags'
                     }
                 });
                 
                 if (!response.data || !response.data.products) {
-                    console.log('Resposta invalida da REST API');
+                    console.log('Resposta inválida da REST API');
                     break;
                 }
                 
                 const products = response.data.products;
                 allProducts = allProducts.concat(products);
                 
-                console.log('Produtos obtidos na pagina', page + ':', products.length);
+                console.log(`Produtos obtidos na página ${page}:`, products.length);
                 
                 if (products.length < limit) {
+                    console.log('Última página alcançada');
                     break;
                 }
                 
                 page++;
+                
+                // Pequena pausa para evitar rate limiting
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
             
         } catch (restError) {
             console.log('Erro na REST API, continuando sem produtos existentes:', restError.message);
+            if (restError.response) {
+                console.log('Detalhes do erro:', JSON.stringify(restError.response.data, null, 2));
+            }
             allProducts = [];
         }
         
@@ -223,6 +291,7 @@ async function getAllProductsFromShopify(shopifyClient) {
             console.log(`   ID: ${product.id}`);
             console.log(`   Título: ${product.title}`);
             console.log(`   Handle: ${product.handle}`);
+            console.log(`   Tags: ${product.tags || 'N/A'}`);
             console.log(`   Variants: ${product.variants ? product.variants.length : 0}`);
             
             if (product.variants && product.variants.length > 0) {
@@ -304,6 +373,24 @@ async function getAllProductsFromShopify(shopifyClient) {
             };
         }
         
+        // CORREÇÃO: Criar mapa de produtos por EAN para busca mais eficiente
+        const productsByEAN = new Map();
+        
+        for (const product of allProducts) {
+            if (product.variants && product.variants.length > 0) {
+                for (const variant of product.variants) {
+                    if (variant.sku) {
+                        productsByEAN.set(variant.sku.trim(), product);
+                    }
+                    if (variant.barcode) {
+                        productsByEAN.set(variant.barcode.trim(), product);
+                    }
+                }
+            }
+        }
+        
+        console.log(`Mapa de produtos por EAN criado com ${productsByEAN.size} entradas`);
+        
         let processedCount = 0;
         let successCount = 0;
         let errorCount = 0;
@@ -314,42 +401,8 @@ async function getAllProductsFromShopify(shopifyClient) {
             
             console.log('Processando EAN ' + processedCount + '/' + localEANs.length + ': ' + ean);
             
-            // CORREÇÃO: Verificação mais robusta de produtos existentes
-            let existingProduct = null;
-            
-            // Primeiro, procurar por SKU exato
-            for (const product of allProducts) {
-                if (product.variants && product.variants.length > 0) {
-                    const matchingVariant = product.variants.find(variant => 
-                        (variant.sku && variant.sku.trim() === ean.trim()) || 
-                        (variant.barcode && variant.barcode.trim() === ean.trim())
-                    );
-                    
-                    if (matchingVariant) {
-                        existingProduct = product;
-                        console.log('Produto encontrado por SKU/barcode exato:', product.title);
-                        break;
-                    }
-                }
-            }
-            
-            // Se não encontrou por SKU exato, tentar por SKU parcial (contém)
-            if (!existingProduct) {
-                for (const product of allProducts) {
-                    if (product.variants && product.variants.length > 0) {
-                        const matchingVariant = product.variants.find(variant => 
-                            (variant.sku && variant.sku.includes(ean)) || 
-                            (variant.barcode && variant.barcode.includes(ean))
-                        );
-                        
-                        if (matchingVariant) {
-                            existingProduct = product;
-                            console.log('Produto encontrado por SKU/barcode parcial:', product.title);
-                            break;
-                        }
-                    }
-                }
-            }
+            // CORREÇÃO: Busca eficiente por EAN usando o mapa
+            const existingProduct = productsByEAN.get(ean.trim());
             
             if (existingProduct) {
                 console.log('Produto ja existe na Shopify (SKU/EAN: ' + ean + ') - atualizando...');
@@ -440,20 +493,8 @@ async function updateProductViaREST(restClient, existingProduct, productData) {
         const { costPrice, retailPrice } = processProductPrices(productData);
         const tags = generateProductTags(productData);
         
-        let inventory_quantity = 0;
-        switch(productData.stock) {
-            case 'Disponivel ( < 10 UN )':
-            case 'Disponivel ( < 10 Un )':
-                inventory_quantity = 9;
-                break;
-            case 'Stock Reduzido ( < 2 UN )':
-            case 'Stock Reduzido ( < 2 Un )':
-                inventory_quantity = 1;
-                break;
-            default:
-                inventory_quantity = 10;
-                break;
-        }
+        // CORREÇÃO: Usar a nova função de processamento de stock
+        const inventory_quantity = processStock(productData.stock);
         
         const productUpdateData = {
             product: {
@@ -517,20 +558,8 @@ async function createProductViaREST(restClient, product) {
         const { costPrice, retailPrice } = processProductPrices(product);
         const tags = generateProductTags(product);
         
-        let inventory_quantity = 0;
-        switch(product.stock) {
-            case 'Disponivel ( < 10 UN )':
-            case 'Disponivel ( < 10 Un )':
-                inventory_quantity = 9;
-                break;
-            case 'Stock Reduzido ( < 2 UN )':
-            case 'Stock Reduzido ( < 2 Un )':
-                inventory_quantity = 1;
-                break;
-            default:
-                inventory_quantity = 10;
-                break;
-        }
+        // CORREÇÃO: Usar a nova função de processamento de stock
+        const inventory_quantity = processStock(product.stock);
         
         const productData = {
             product: {
