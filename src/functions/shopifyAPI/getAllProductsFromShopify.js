@@ -1,6 +1,96 @@
 require('colors');
 const axios = require('axios');
 
+// Função para gerar tags automáticas CORRIGIDA
+function generateProductTags(product) {
+    const tags = [];
+    
+    // Validar se product existe
+    if (!product) {
+        console.log('⚠️ Produto undefined - não é possível gerar tags');
+        return [];
+    }
+    
+    // 1. TAG DE MARCA
+    let brandTag = '';
+    if (product.brand) {
+        // Lógica especial para Yeelight
+        if (product.brand.toLowerCase() === 'xiaomi' && product.name && product.name.toLowerCase().includes('yeelight')) {
+            brandTag = 'Yeelight';
+        } else {
+            // Mapear marcas conhecidas
+            const brandMap = {
+                'xiaomi': 'Xiaomi',
+                'baseus': 'Baseus',
+                'torras': 'Torras',
+                'apple': 'Apple',
+                'hutt': 'Hutt',
+                'petkit': 'Petkit',
+                'kingston': 'Kingston'
+            };
+            brandTag = brandMap[product.brand.toLowerCase()] || product.brand;
+        }
+        if (brandTag) tags.push(brandTag);
+    }
+    
+    // 2. TAG DE SUB-CATEGORIA CORRIGIDA (baseada no título E descrição)
+    let categoryTag = '';
+    const productName = (product.name || '').toLowerCase();
+    const productDescription = (product.description || '').toLowerCase();
+    const productFamily = (product.family || '').toLowerCase();
+    
+    // CORREÇÃO: Verificar categorias específicas por ordem de prioridade
+    if (productName.includes('aspirador robô') || productName.includes('robot vacuum') || productName.includes('mi robot')) {
+        categoryTag = 'Aspirador Robô';
+    } else if (productName.includes('aspirador vertical') || productDescription.includes('aspirador vertical') || productDescription.includes('tipo aspirador vertical')) {
+        categoryTag = 'Aspirador Vertical';  // CORREÇÃO: Esta era a tag que faltava!
+    } else if (productName.includes('mini aspirador')) {
+        categoryTag = 'Mini Aspirador';
+    } else if (productName.includes('aspirador') || productFamily.includes('aspiração')) {
+        categoryTag = 'Aspiradores';  // Fallback para aspiradores genéricos
+    } else if (productName.includes('câmara') || productName.includes('camera') || productName.includes('webcam')) {
+        categoryTag = 'Câmaras';
+    } else if (productName.includes('sensor')) {
+        categoryTag = 'Sensores Inteligentes';
+    } else if (productName.includes('fechadura') || productName.includes('lock')) {
+        categoryTag = 'Fechaduras Inteligentes';
+    } else if (productName.includes('tomada') || productName.includes('socket') || productName.includes('plug')) {
+        categoryTag = 'Tomadas';
+    } else if (productName.includes('controlo remoto') || productName.includes('comando') || productName.includes('remote')) {
+        categoryTag = 'Controlo Remoto';
+    } else if (productName.includes('iluminação') || productName.includes('luz') || productName.includes('lamp') || productName.includes('light')) {
+        categoryTag = 'Iluminação';
+    } else if (productName.includes('cortina') || productName.includes('curtain')) {
+        categoryTag = 'Motor Cortinas';
+    } else if (productName.includes('campainha') || productName.includes('doorbell')) {
+        categoryTag = 'Campainha Inteligente';
+    } else if (productName.includes('interruptor') || productName.includes('switch')) {
+        categoryTag = 'Interruptor Inteligente';
+    } else if (productName.includes('hub') || productName.includes('gateway')) {
+        categoryTag = 'Hubs Inteligentes';
+    } else if (productName.includes('assistente') || productName.includes('alexa') || productName.includes('google')) {
+        categoryTag = 'Assistentes Virtuais';
+    } else if (productName.includes('painel')) {
+        categoryTag = 'Painel Controlo';
+    } else if (productName.includes('acessório') && productName.includes('aspirador')) {
+        categoryTag = 'Acessórios Aspiradores';
+    } else if (productName.includes('inteligente') || productName.includes('smart')) {
+        categoryTag = 'Gadgets Inteligentes';
+    } else {
+        // Fallback inteligente
+        if (product.brand && product.brand.toLowerCase() === 'petkit') {
+            categoryTag = 'Gadgets P/ Animais';
+        } else {
+            categoryTag = 'Gadgets Diversos';
+        }
+    }
+    
+    if (categoryTag) tags.push(categoryTag);
+    
+    console.log('🏷️ Tags geradas para', product.name || 'produto sem nome', ':', tags);
+    return tags;
+}
+
 // Função para obter produtos da Shopify via REST API
 async function getAllProductsFromShopify(shopifyClient) {
     try {
@@ -199,17 +289,13 @@ async function getAllProductsFromShopify(shopifyClient) {
     }
 }
 
-// Função para criar produto via REST API
+// Função para criar produto via REST API CORRIGIDA
 async function createProductViaREST(restClient, product) {
     try {
         console.log('🚀 Criando produto via REST API:', product.name);
         
-        // Gerar tags automáticas
-        const tags = [];
-        if (product.brand) {
-            tags.push(product.brand);
-        }
-        tags.push('Gadgets Diversos');
+        // Gerar tags automáticas CORRIGIDAS
+        const tags = generateProductTags(product);
         
         // Mapear stock
         let inventory_quantity = 0;
@@ -227,6 +313,15 @@ async function createProductViaREST(restClient, product) {
                 break;
         }
         
+        // CORREÇÃO: Preços corretos
+        const costPrice = parseFloat(product.price) || 0;  // Preço de custo (134.30)
+        const retailPrice = parseFloat(product.pvpr) || costPrice;  // PVP (199.99)
+        
+        console.log('💰 Preços processados:');
+        console.log('   • Preço de custo (price):', costPrice + '€');
+        console.log('   • PVP (pvpr):', retailPrice + '€');
+        console.log('   • Usando como preço de venda:', retailPrice + '€');
+        
         // Preparar dados do produto para REST API
         const productData = {
             product: {
@@ -238,8 +333,11 @@ async function createProductViaREST(restClient, product) {
                 status: 'active',
                 variants: [
                     {
-                        price: product.price || product.pvpr || '0.00',
-                        sku: product.ean,
+                        price: retailPrice.toFixed(2),  // CORREÇÃO: Usar PVP como preço de venda
+                        compare_at_price: null,  // Pode ser usado para preço riscado
+                        cost: costPrice.toFixed(2),  // CORREÇÃO: Preço de custo
+                        sku: product.ean,  // SKU continua a ser o EAN
+                        barcode: product.ean,  // CORREÇÃO: EAN no campo barcode
                         inventory_management: 'shopify',
                         inventory_policy: 'deny',
                         inventory_quantity: inventory_quantity
@@ -258,9 +356,12 @@ async function createProductViaREST(restClient, product) {
         
         console.log('📤 Enviando produto via REST API...');
         console.log('   • Título:', productData.product.title);
-        console.log('   • Preço:', productData.product.variants[0].price);
+        console.log('   • Preço de venda (PVP):', productData.product.variants[0].price + '€');
+        console.log('   • Preço de custo:', productData.product.variants[0].cost + '€');
         console.log('   • SKU:', productData.product.variants[0].sku);
+        console.log('   • EAN (barcode):', productData.product.variants[0].barcode);
         console.log('   • Stock:', productData.product.variants[0].inventory_quantity);
+        console.log('   • Tags:', productData.product.tags);
         console.log('   • Imagens:', productData.product.images ? productData.product.images.length : 0);
         
         const response = await restClient.post('/products.json', productData);
@@ -269,6 +370,8 @@ async function createProductViaREST(restClient, product) {
             console.log('✅ Produto criado com sucesso via REST API!');
             console.log('   • ID:', response.data.product.id);
             console.log('   • Handle:', response.data.product.handle);
+            console.log('   • Tags aplicadas:', response.data.product.tags);
+            console.log('   • Preço final:', response.data.product.variants[0].price + '€');
             return response.data.product;
         } else {
             throw new Error('Resposta inválida da REST API');
@@ -284,4 +387,4 @@ async function createProductViaREST(restClient, product) {
 }
 
 module.exports = getAllProductsFromShopify;
-                    
+
