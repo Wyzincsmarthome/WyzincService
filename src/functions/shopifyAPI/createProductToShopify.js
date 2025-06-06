@@ -4,6 +4,12 @@ require('colors');
 function generateProductTags(product) {
     const tags = [];
     
+    // Validar se product existe
+    if (!product) {
+        console.log('⚠️ Produto undefined - não é possível gerar tags');
+        return [];
+    }
+    
     // 1. TAG DE MARCA
     let brandTag = '';
     if (product.brand) {
@@ -76,14 +82,24 @@ function generateProductTags(product) {
     
     if (categoryTag) tags.push(categoryTag);
     
-    console.log('🏷️ Tags geradas para', product.name, ':', tags);
+    console.log('🏷️ Tags geradas para', product.name || 'produto sem nome', ':', tags);
     return tags;
 }
 
 async function createProductToShopify(shopifyClient, product) {
     try {
-        console.log('🚀 Iniciando criação de produto:', product.name);
-        console.log('📦 EAN:', product.ean);
+        // VALIDAÇÃO CRÍTICA: Verificar se product existe
+        if (!product) {
+            throw new Error('Parâmetro product é undefined ou null - não é possível criar produto');
+        }
+        
+        // VALIDAÇÃO CRÍTICA: Verificar propriedades essenciais
+        if (typeof product !== 'object') {
+            throw new Error('Parâmetro product não é um objeto válido');
+        }
+        
+        console.log('🚀 Iniciando criação de produto:', product.name || 'Nome não definido');
+        console.log('📦 EAN:', product.ean || 'EAN não definido');
         
         // Validar cliente Shopify
         if (!shopifyClient) {
@@ -94,9 +110,13 @@ async function createProductToShopify(shopifyClient, product) {
             throw new Error('Cliente Shopify inválido - método request não encontrado');
         }
         
-        // Validar dados do produto
-        if (!product.name || !product.ean) {
-            throw new Error('Dados do produto incompletos - nome e EAN são obrigatórios');
+        // Validar dados do produto com mensagens específicas
+        if (!product.name) {
+            throw new Error('Nome do produto é obrigatório mas está undefined/vazio');
+        }
+        
+        if (!product.ean) {
+            throw new Error('EAN do produto é obrigatório mas está undefined/vazio');
         }
         
         // Gerar tags automáticas
@@ -104,20 +124,23 @@ async function createProductToShopify(shopifyClient, product) {
         
         let tempStock = 0;
         
-        // Mapeamento corrigido de stock (com "UN" maiúsculo)
-        console.log('📦 Processando stock:', product.stock);
+        // Mapeamento corrigido de stock
+        console.log('📦 Processando stock:', product.stock || 'Stock não definido');
         switch(product.stock) {
             case 'Disponível ( < 10 UN )':
+            case 'Disponível ( < 10 Un )':
                 tempStock = 9;
-                console.log('✅ Stock mapeado: Disponível ( < 10 UN ) → 9 unidades');
+                console.log('✅ Stock mapeado: Disponível ( < 10 Un ) → 9 unidades');
                 break;
             case 'Stock Reduzido ( < 2 UN )':
+            case 'Stock Reduzido ( < 2 Un )':
                 tempStock = 1;
-                console.log('⚠️ Stock mapeado: Stock Reduzido < 2 UN → 1 unidade');
+                console.log('⚠️ Stock mapeado: Stock Reduzido < 2 Un → 1 unidade');
                 break;
             case 'Disponível ( < 2 UN )':
+            case 'Disponível ( < 2 Un )':
                 tempStock = 1;
-                console.log('⚠️ Stock mapeado: Disponível < 2 UN → 1 unidade');
+                console.log('⚠️ Stock mapeado: Disponível < 2 Un → 1 unidade');
                 break;
             case 'Brevemente':
                 tempStock = 0;
@@ -129,18 +152,20 @@ async function createProductToShopify(shopifyClient, product) {
                 break;
             default:
                 tempStock = 10;
-                console.log('📦 Stock mapeado: Default (' + product.stock + ') → 10 unidades');
+                console.log('📦 Stock mapeado: Default (' + (product.stock || 'undefined') + ') → 10 unidades');
                 break;
         }
         
-        // Preparar array de imagens corrigido
+        // Preparar array de imagens
         const imageList = product.images && Array.isArray(product.images) 
             ? product.images.map(img => ({ src: img })) 
             : [];
         console.log('🖼️ Imagens processadas:', imageList.length);
         
-        // Usar GraphQL para criar produto (biblioteca v1.1.0)
-        const mutation = `
+        // PASSO 1: Criar produto básico (SEM variants e images)
+        console.log('📝 Passo 1: Criando produto básico...');
+        
+        const productMutation = `
             mutation productCreate($input: ProductInput!) {
                 productCreate(input: $input) {
                     product {
@@ -157,107 +182,220 @@ async function createProductToShopify(shopifyClient, product) {
             }
         `;
         
-        const variables = {
+        const productInput = {
             input: {
                 title: product.name,
                 descriptionHtml: (product.short_description || '') + "\\n\\n" + (product.description || ''),
                 productType: product.family || '',
                 status: "ACTIVE",
                 tags: productTags,
-                variants: [
-                    {
-                        price: (product.optFinalPrice || 0).toString(),
-                        sku: product.ean,
-                        inventoryPolicy: "DENY",
-                        inventoryManagement: "SHOPIFY",
-                        inventoryQuantities: [
-                            {
-                                availableQuantity: tempStock,
-                                locationId: "gid://shopify/Location/84623851786" // Substituir pelo ID real
-                            }
-                        ]
-                    }
-                ],
-                images: imageList.map(img => ({ src: img.src }))
+                vendor: product.brand || ''
             }
         };
         
-        console.log('📤 Dados a enviar:');
-        console.log('   • Título:', variables.input.title);
-        console.log('   • Preço:', variables.input.variants[0].price);
-        console.log('   • SKU:', variables.input.variants[0].sku);
-        console.log('   • Stock:', variables.input.variants[0].inventoryQuantities[0].availableQuantity);
-        console.log('   • Tags:', variables.input.tags);
-        console.log('   • Imagens:', variables.input.images.length);
+        console.log('📤 Criando produto básico...');
+        console.log('   • Título:', productInput.input.title);
+        console.log('   • Tipo:', productInput.input.productType);
+        console.log('   • Tags:', productInput.input.tags);
+        console.log('   • Vendor:', productInput.input.vendor);
         
-        console.log('🚀 Enviando produto para Shopify via GraphQL...');
-        
-        let response;
+        let productResponse;
         try {
-            response = await shopifyClient.request(mutation, { variables });
-            console.log('📄 Resposta recebida da API');
+            productResponse = await shopifyClient.request(productMutation, productInput);
+            console.log('📄 Resposta do produto básico recebida');
             
-        } catch (requestError) {
-            console.error('❌ Erro na chamada da API:', requestError.message);
-            if (requestError.response) {
-                console.error('📄 Detalhes do erro:', JSON.stringify(requestError.response, null, 2));
+        } catch (productError) {
+            console.error('❌ Erro na criação do produto básico:', productError.message);
+            if (productError.response) {
+                console.error('📄 Detalhes:', JSON.stringify(productError.response, null, 2));
             }
-            throw requestError;
+            throw productError;
         }
         
-        // Validação robusta da resposta
-        console.log('🔍 Validando resposta...');
-        console.log('📄 Estrutura da resposta:', {
-            hasResponse: !!response,
-            hasData: !!(response && response.data),
-            hasProductCreate: !!(response && response.data && response.data.productCreate),
-            responseKeys: response ? Object.keys(response) : [],
-            dataKeys: response && response.data ? Object.keys(response.data) : []
-        });
-        
-        if (!response) {
-            throw new Error('Resposta vazia da API Shopify');
+        // Validar resposta do produto
+        if (!productResponse || !productResponse.data) {
+            console.error('❌ Resposta inválida do produto básico');
+            console.error('📄 Resposta:', JSON.stringify(productResponse, null, 2));
+            throw new Error('Falha na criação do produto básico - resposta inválida');
         }
         
-        if (!response.data) {
-            console.error('❌ response.data é undefined');
-            console.error('📄 Resposta completa:', JSON.stringify(response, null, 2));
-            throw new Error('response.data é undefined - possível problema de autenticação ou permissões');
+        if (!productResponse.data.productCreate) {
+            console.error('❌ productCreate não encontrado na resposta');
+            console.error('📄 Data:', JSON.stringify(productResponse.data, null, 2));
+            throw new Error('Falha na criação do produto básico - productCreate não encontrado');
         }
         
-        if (!response.data.productCreate) {
-            console.error('❌ response.data.productCreate é undefined');
-            console.error('📄 response.data:', JSON.stringify(response.data, null, 2));
-            throw new Error('response.data.productCreate é undefined - possível problema na mutation GraphQL');
-        }
-        
-        console.log('✅ Estrutura de resposta válida');
-        
-        // Verificar erros na criação
-        if (response.data.productCreate.userErrors && response.data.productCreate.userErrors.length > 0) {
-            console.log('❌ Erros na criação do produto:'.red);
-            response.data.productCreate.userErrors.forEach(error => {
+        // Verificar erros na criação do produto
+        if (productResponse.data.productCreate.userErrors && productResponse.data.productCreate.userErrors.length > 0) {
+            console.log('❌ Erros na criação do produto básico:'.red);
+            productResponse.data.productCreate.userErrors.forEach(error => {
                 console.log(`   • ${error.field}: ${error.message}`.red);
             });
-            throw new Error(`Erros na criação: ${response.data.productCreate.userErrors.map(e => e.message).join(', ')}`);
+            throw new Error(`Erros na criação do produto: ${productResponse.data.productCreate.userErrors.map(e => e.message).join(', ')}`);
         }
         
-        // Verificar se produto foi criado
-        if (response.data.productCreate.product) {
-            console.log('✅ Produto com EAN ' + product.ean + ' foi criado!'.green);
-            console.log('   • ID:', response.data.productCreate.product.id);
-            console.log('   • Handle:', response.data.productCreate.product.handle);
-            console.log('   • Status:', response.data.productCreate.product.status);
-            return response.data.productCreate.product;
-        } else {
-            console.error('❌ Produto não foi criado - campo product vazio');
-            console.error('📄 response.data.productCreate:', JSON.stringify(response.data.productCreate, null, 2));
-            throw new Error('Produto não foi criado - resposta sem campo product');
+        if (!productResponse.data.productCreate.product) {
+            console.error('❌ Produto não foi criado');
+            console.error('📄 productCreate:', JSON.stringify(productResponse.data.productCreate, null, 2));
+            throw new Error('Produto básico não foi criado');
         }
+        
+        const createdProduct = productResponse.data.productCreate.product;
+        console.log('✅ Produto básico criado com sucesso!'.green);
+        console.log('   • ID:', createdProduct.id);
+        console.log('   • Handle:', createdProduct.handle);
+        
+        // PASSO 2: Adicionar variant
+        console.log('📝 Passo 2: Adicionando variant...');
+        
+        const variantMutation = `
+            mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                productVariantsBulkCreate(productId: $productId, variants: $variants) {
+                    productVariants {
+                        id
+                        price
+                        sku
+                        inventoryQuantity
+                    }
+                    userErrors {
+                        field
+                        message
+                    }
+                }
+            }
+        `;
+        
+        const variantInput = {
+            productId: createdProduct.id,
+            variants: [
+                {
+                    price: (product.optFinalPrice || product.pvpr || 0).toString(),
+                    sku: product.ean,
+                    inventoryPolicy: "DENY",
+                    inventoryManagement: "SHOPIFY",
+                    inventoryQuantities: [
+                        {
+                            availableQuantity: tempStock,
+                            locationId: "gid://shopify/Location/84623851786"
+                        }
+                    ]
+                }
+            ]
+        };
+        
+        console.log('📤 Adicionando variant...');
+        console.log('   • Preço:', variantInput.variants[0].price);
+        console.log('   • SKU:', variantInput.variants[0].sku);
+        console.log('   • Stock:', variantInput.variants[0].inventoryQuantities[0].availableQuantity);
+        
+        let variantResponse;
+        try {
+            variantResponse = await shopifyClient.request(variantMutation, variantInput);
+            console.log('📄 Resposta da variant recebida');
+            
+        } catch (variantError) {
+            console.error('❌ Erro na criação da variant:', variantError.message);
+            if (variantError.response) {
+                console.error('📄 Detalhes:', JSON.stringify(variantError.response, null, 2));
+            }
+            // Continuar mesmo com erro na variant
+            console.log('⚠️ Continuando sem variant...');
+        }
+        
+        // Validar resposta da variant
+        if (variantResponse && variantResponse.data && variantResponse.data.productVariantsBulkCreate) {
+            if (variantResponse.data.productVariantsBulkCreate.userErrors && variantResponse.data.productVariantsBulkCreate.userErrors.length > 0) {
+                console.log('❌ Erros na criação da variant:'.yellow);
+                variantResponse.data.productVariantsBulkCreate.userErrors.forEach(error => {
+                    console.log(`   • ${error.field}: ${error.message}`.yellow);
+                });
+            } else if (variantResponse.data.productVariantsBulkCreate.productVariants && variantResponse.data.productVariantsBulkCreate.productVariants.length > 0) {
+                console.log('✅ Variant criada com sucesso!'.green);
+                console.log('   • ID:', variantResponse.data.productVariantsBulkCreate.productVariants[0].id);
+                console.log('   • Preço:', variantResponse.data.productVariantsBulkCreate.productVariants[0].price);
+            }
+        }
+        
+        // PASSO 3: Adicionar imagens (se existirem)
+        if (imageList.length > 0) {
+            console.log('📝 Passo 3: Adicionando imagens...');
+            
+            const imageMutation = `
+                mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+                    productCreateMedia(productId: $productId, media: $media) {
+                        media {
+                            id
+                            alt
+                            ... on MediaImage {
+                                image {
+                                    url
+                                }
+                            }
+                        }
+                        userErrors {
+                            field
+                            message
+                        }
+                    }
+                }
+            `;
+            
+            const mediaInput = {
+                productId: createdProduct.id,
+                media: imageList.map((img, index) => ({
+                    originalSource: img.src,
+                    alt: `${product.name} - Imagem ${index + 1}`,
+                    mediaContentType: "IMAGE"
+                }))
+            };
+            
+            console.log('📤 Adicionando', imageList.length, 'imagens...');
+            
+            try {
+                const imageResponse = await shopifyClient.request(imageMutation, mediaInput);
+                console.log('📄 Resposta das imagens recebida');
+                
+                if (imageResponse && imageResponse.data && imageResponse.data.productCreateMedia) {
+                    if (imageResponse.data.productCreateMedia.userErrors && imageResponse.data.productCreateMedia.userErrors.length > 0) {
+                        console.log('❌ Erros na criação das imagens:'.yellow);
+                        imageResponse.data.productCreateMedia.userErrors.forEach(error => {
+                            console.log(`   • ${error.field}: ${error.message}`.yellow);
+                        });
+                    } else if (imageResponse.data.productCreateMedia.media && imageResponse.data.productCreateMedia.media.length > 0) {
+                        console.log('✅ Imagens adicionadas com sucesso!'.green);
+                        console.log('   • Total:', imageResponse.data.productCreateMedia.media.length);
+                    }
+                }
+                
+            } catch (imageError) {
+                console.error('❌ Erro na criação das imagens:', imageError.message);
+                if (imageError.response) {
+                    console.error('📄 Detalhes:', JSON.stringify(imageError.response, null, 2));
+                }
+                // Continuar mesmo com erro nas imagens
+                console.log('⚠️ Continuando sem imagens...');
+            }
+        } else {
+            console.log('📝 Passo 3: Sem imagens para adicionar');
+        }
+        
+        console.log('✅ Produto com EAN ' + (product.ean || 'N/A') + ' foi criado com sucesso!'.green);
+        console.log('   • ID:', createdProduct.id);
+        console.log('   • Handle:', createdProduct.handle);
+        console.log('   • Status:', createdProduct.status);
+        
+        return createdProduct;
         
     } catch (error) {
         console.log("=".repeat(50).yellow);
-        console.log("ERRO (createProduct) [EAN: " + (product.ean || 'N/A') + " ]: " + error.message.yellow);
+        
+        // CORREÇÃO CRÍTICA: Validação robusta antes de aceder a product.ean
+        let eanValue = 'N/A';
+        if (product && typeof product === 'object' && product.ean) {
+            eanValue = product.ean;
+        }
+        
+        console.log("ERRO (createProduct) [EAN: " + eanValue + " ]: " + error.message.yellow);
         console.log("=".repeat(50).yellow);
         
         // Logs adicionais para debugging
@@ -265,7 +403,20 @@ async function createProductToShopify(shopifyClient, product) {
             console.log('📄 Stack trace:', error.stack);
         }
         
+        // Debugging do parâmetro product
+        console.log('🔍 Debugging do parâmetro product:');
+        console.log('   • Tipo:', typeof product);
+        console.log('   • É null?', product === null);
+        console.log('   • É undefined?', product === undefined);
+        if (product && typeof product === 'object') {
+            console.log('   • Propriedades:', Object.keys(product));
+        }
+        
         // Sugestões baseadas no tipo de erro
+        if (error.message.includes('Field is not defined')) {
+            console.log('💡 Sugestão: Problema na estrutura GraphQL - campos não suportados');
+        }
+        
         if (error.message.includes('productCreate')) {
             console.log('💡 Sugestão: Verifique se a mutation GraphQL está correta');
         }
@@ -274,8 +425,8 @@ async function createProductToShopify(shopifyClient, product) {
             console.log('💡 Sugestão: Possível problema de estrutura de resposta ou permissões');
         }
         
-        if (error.message.includes('autenticação')) {
-            console.log('💡 Sugestão: Verifique se o Access Token tem permissões para criar produtos');
+        if (error.message.includes('product é undefined')) {
+            console.log('💡 Sugestão: Verificar onde esta função está a ser chamada - parâmetro product não está a ser passado corretamente');
         }
         
         throw error;
