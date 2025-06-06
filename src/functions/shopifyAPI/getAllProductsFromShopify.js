@@ -1,8 +1,91 @@
-async function getAllProductsFromShopify(shopifyClient) {
+require('colors');
+
+// Função para gerar tags automáticas baseadas no produto
+function generateProductTags(product) {
+    const tags = [];
+    
+    // 1. TAG DE MARCA
+    let brandTag = '';
+    if (product.brand) {
+        // Lógica especial para Yeelight
+        if (product.brand.toLowerCase() === 'xiaomi' && product.name && product.name.toLowerCase().includes('yeelight')) {
+            brandTag = 'Yeelight';
+        } else {
+            // Mapear marcas conhecidas
+            const brandMap = {
+                'xiaomi': 'Xiaomi',
+                'baseus': 'Baseus',
+                'torras': 'Torras',
+                'apple': 'Apple',
+                'hutt': 'Hutt',
+                'petkit': 'Petkit',
+                'kingston': 'Kingston'
+            };
+            brandTag = brandMap[product.brand.toLowerCase()] || product.brand;
+        }
+        if (brandTag) tags.push(brandTag);
+    }
+    
+    // 2. TAG DE SUB-CATEGORIA (baseada no título)
+    let categoryTag = '';
+    const productName = (product.name || '').toLowerCase();
+    
+    // Verificar categorias específicas por ordem de prioridade
+    if (productName.includes('aspirador robô') || productName.includes('robot vacuum')) {
+        categoryTag = 'Aspirador Robô';
+    } else if (productName.includes('aspirador vertical')) {
+        categoryTag = 'Aspirador Vertical';
+    } else if (productName.includes('mini aspirador')) {
+        categoryTag = 'Mini Aspirador';
+    } else if (productName.includes('câmara') || productName.includes('camera') || productName.includes('webcam')) {
+        categoryTag = 'Câmaras';
+    } else if (productName.includes('sensor')) {
+        categoryTag = 'Sensores Inteligentes';
+    } else if (productName.includes('fechadura') || productName.includes('lock')) {
+        categoryTag = 'Fechaduras Inteligentes';
+    } else if (productName.includes('tomada') || productName.includes('socket') || productName.includes('plug')) {
+        categoryTag = 'Tomadas';
+    } else if (productName.includes('controlo remoto') || productName.includes('comando') || productName.includes('remote')) {
+        categoryTag = 'Controlo Remoto';
+    } else if (productName.includes('iluminação') || productName.includes('luz') || productName.includes('lamp') || productName.includes('light')) {
+        categoryTag = 'Iluminação';
+    } else if (productName.includes('cortina') || productName.includes('curtain')) {
+        categoryTag = 'Motor Cortinas';
+    } else if (productName.includes('campainha') || productName.includes('doorbell')) {
+        categoryTag = 'Campainha Inteligente';
+    } else if (productName.includes('interruptor') || productName.includes('switch')) {
+        categoryTag = 'Interruptor Inteligente';
+    } else if (productName.includes('hub') || productName.includes('gateway')) {
+        categoryTag = 'Hubs Inteligentes';
+    } else if (productName.includes('assistente') || productName.includes('alexa') || productName.includes('google')) {
+        categoryTag = 'Assistentes Virtuais';
+    } else if (productName.includes('painel')) {
+        categoryTag = 'Painel Controlo';
+    } else if (productName.includes('acessório') && productName.includes('aspirador')) {
+        categoryTag = 'Acessórios Aspiradores';
+    } else if (productName.includes('inteligente') || productName.includes('smart')) {
+        categoryTag = 'Gadgets Inteligentes';
+    } else {
+        // Fallback inteligente
+        if (product.brand && product.brand.toLowerCase() === 'petkit') {
+            categoryTag = 'Gadgets P/ Animais';
+        } else {
+            categoryTag = 'Gadgets Diversos';
+        }
+    }
+    
+    if (categoryTag) tags.push(categoryTag);
+    
+    console.log('🏷️ Tags geradas para', product.name, ':', tags);
+    return tags;
+}
+
+async function createProductToShopify(shopifyClient, product) {
     try {
-        console.log('🛍️ Obtendo produtos da Shopify...');
+        console.log('🚀 Iniciando criação de produto:', product.name);
+        console.log('📦 EAN:', product.ean);
         
-        // Validar cliente
+        // Validar cliente Shopify
         if (!shopifyClient) {
             throw new Error('Cliente Shopify não fornecido');
         }
@@ -11,278 +94,304 @@ async function getAllProductsFromShopify(shopifyClient) {
             throw new Error('Cliente Shopify inválido - método request não encontrado');
         }
         
-        let allProducts = [];
-        
-        // Query GraphQL simplificada para teste inicial
-        const simpleTestQuery = `
-            query {
-                shop {
-                    name
-                    domain
-                }
-            }
-        `;
-        
-        console.log('🔍 Testando conectividade básica...');
-        
-        let testResponse;
-        try {
-            testResponse = await shopifyClient.request(simpleTestQuery);
-            console.log('📄 Resposta do teste:', JSON.stringify(testResponse, null, 2));
-            
-            if (testResponse && testResponse.data && testResponse.data.shop) {
-                console.log('✅ Conectividade confirmada com:', testResponse.data.shop.name);
-            } else {
-                console.log('⚠️ Resposta de teste inesperada');
-            }
-        } catch (testError) {
-            console.error('❌ Erro no teste de conectividade:', testError.message);
-            if (testError.response) {
-                console.error('📄 Detalhes do erro:', JSON.stringify(testError.response, null, 2));
-            }
-            throw new Error(`Falha no teste de conectividade: ${testError.message}`);
+        // Validar dados do produto
+        if (!product.name || !product.ean) {
+            throw new Error('Dados do produto incompletos - nome e EAN são obrigatórios');
         }
         
-        // Query para contagem de produtos (versão robusta)
-        const countQuery = `
-            query {
-                products(first: 1) {
-                    edges {
-                        node {
-                            id
-                        }
-                    }
-                    pageInfo {
-                        hasNextPage
-                    }
-                }
-            }
-        `;
+        // Gerar tags automáticas
+        const productTags = generateProductTags(product);
         
-        console.log('📊 Obtendo informações de produtos...');
+        let tempStock = 0;
         
-        let countResponse;
-        try {
-            countResponse = await shopifyClient.request(countQuery);
-            console.log('📄 Resposta da contagem:', JSON.stringify(countResponse, null, 2));
-            
-            // Validação robusta da resposta
-            if (!countResponse) {
-                throw new Error('Resposta vazia da API');
-            }
-            
-            if (!countResponse.data) {
-                console.error('❌ response.data é undefined');
-                console.error('📄 Resposta completa:', JSON.stringify(countResponse, null, 2));
-                throw new Error('response.data é undefined - possível problema de permissões ou API version');
-            }
-            
-            if (!countResponse.data.products) {
-                console.error('❌ response.data.products é undefined');
-                console.error('📄 response.data:', JSON.stringify(countResponse.data, null, 2));
-                throw new Error('response.data.products é undefined - verifique permissões de leitura de produtos');
-            }
-            
-            console.log('✅ Estrutura de resposta válida');
-            
-        } catch (countError) {
-            console.error('❌ Erro na query de contagem:', countError.message);
-            if (countError.response) {
-                console.error('📄 Detalhes do erro:', JSON.stringify(countError.response, null, 2));
-            }
-            throw countError;
+        // Mapeamento corrigido de stock
+        console.log('📦 Processando stock:', product.stock);
+        switch(product.stock) {
+            case 'Disponível ( < 10 UN )':
+            case 'Disponível ( < 10 Un )':
+                tempStock = 9;
+                console.log('✅ Stock mapeado: Disponível ( < 10 Un ) → 9 unidades');
+                break;
+            case 'Stock Reduzido ( < 2 UN )':
+            case 'Stock Reduzido ( < 2 Un )':
+                tempStock = 1;
+                console.log('⚠️ Stock mapeado: Stock Reduzido < 2 Un → 1 unidade');
+                break;
+            case 'Disponível ( < 2 UN )':
+            case 'Disponível ( < 2 Un )':
+                tempStock = 1;
+                console.log('⚠️ Stock mapeado: Disponível < 2 Un → 1 unidade');
+                break;
+            case 'Brevemente':
+                tempStock = 0;
+                console.log('❌ Stock mapeado: Brevemente → 0 unidades');
+                break;
+            case 'Esgotado':
+                tempStock = 0;
+                console.log('❌ Stock mapeado: Esgotado → 0 unidades');
+                break;
+            default:
+                tempStock = 10;
+                console.log('📦 Stock mapeado: Default (' + product.stock + ') → 10 unidades');
+                break;
         }
         
-        // Query principal para obter produtos
-        const productsQuery = `
-            query getProducts($first: Int!, $after: String) {
-                products(first: $first, after: $after) {
-                    edges {
-                        node {
-                            id
-                            title
-                            handle
-                            status
-                            vendor
-                            productType
-                            tags
-                            createdAt
-                            updatedAt
-                            variants(first: 5) {
-                                edges {
-                                    node {
-                                        id
-                                        title
-                                        price
-                                        sku
-                                        barcode
-                                        inventoryQuantity
-                                    }
-                                }
-                            }
-                            images(first: 3) {
-                                edges {
-                                    node {
-                                        id
-                                        url
-                                        altText
-                                    }
-                                }
-                            }
-                        }
-                        cursor
+        // Preparar array de imagens
+        const imageList = product.images && Array.isArray(product.images) 
+            ? product.images.map(img => ({ src: img })) 
+            : [];
+        console.log('🖼️ Imagens processadas:', imageList.length);
+        
+        // PASSO 1: Criar produto básico (SEM variants e images)
+        console.log('📝 Passo 1: Criando produto básico...');
+        
+        const productMutation = `
+            mutation productCreate($input: ProductInput!) {
+                productCreate(input: $input) {
+                    product {
+                        id
+                        title
+                        handle
+                        status
                     }
-                    pageInfo {
-                        hasNextPage
-                        endCursor
+                    userErrors {
+                        field
+                        message
                     }
                 }
             }
         `;
         
-        // Obter produtos em lotes pequenos para teste
-        const batchSize = 10; // Reduzido para teste
-        let hasNextPage = true;
-        let cursor = null;
-        let processedCount = 0;
-        let maxProducts = 50; // Limite para teste
+        const productInput = {
+            input: {
+                title: product.name,
+                descriptionHtml: (product.short_description || '') + "\\n\\n" + (product.description || ''),
+                productType: product.family || '',
+                status: "ACTIVE",
+                tags: productTags,
+                vendor: product.brand || ''
+            }
+        };
         
-        console.log(`🔄 Iniciando obtenção de produtos (máximo ${maxProducts})...`);
+        console.log('📤 Criando produto básico...');
+        console.log('   • Título:', productInput.input.title);
+        console.log('   • Tipo:', productInput.input.productType);
+        console.log('   • Tags:', productInput.input.tags);
+        console.log('   • Vendor:', productInput.input.vendor);
         
-        while (hasNextPage && processedCount < maxProducts) {
-            console.log(`📦 Processando lote ${Math.floor(processedCount / batchSize) + 1}...`);
+        let productResponse;
+        try {
+            productResponse = await shopifyClient.request(productMutation, productInput);
+            console.log('📄 Resposta do produto básico recebida');
             
-            const variables = {
-                first: batchSize,
-                after: cursor
+        } catch (productError) {
+            console.error('❌ Erro na criação do produto básico:', productError.message);
+            if (productError.response) {
+                console.error('📄 Detalhes:', JSON.stringify(productError.response, null, 2));
+            }
+            throw productError;
+        }
+        
+        // Validar resposta do produto
+        if (!productResponse || !productResponse.data) {
+            console.error('❌ Resposta inválida do produto básico');
+            console.error('📄 Resposta:', JSON.stringify(productResponse, null, 2));
+            throw new Error('Falha na criação do produto básico - resposta inválida');
+        }
+        
+        if (!productResponse.data.productCreate) {
+            console.error('❌ productCreate não encontrado na resposta');
+            console.error('📄 Data:', JSON.stringify(productResponse.data, null, 2));
+            throw new Error('Falha na criação do produto básico - productCreate não encontrado');
+        }
+        
+        // Verificar erros na criação do produto
+        if (productResponse.data.productCreate.userErrors && productResponse.data.productCreate.userErrors.length > 0) {
+            console.log('❌ Erros na criação do produto básico:'.red);
+            productResponse.data.productCreate.userErrors.forEach(error => {
+                console.log(`   • ${error.field}: ${error.message}`.red);
+            });
+            throw new Error(`Erros na criação do produto: ${productResponse.data.productCreate.userErrors.map(e => e.message).join(', ')}`);
+        }
+        
+        if (!productResponse.data.productCreate.product) {
+            console.error('❌ Produto não foi criado');
+            console.error('📄 productCreate:', JSON.stringify(productResponse.data.productCreate, null, 2));
+            throw new Error('Produto básico não foi criado');
+        }
+        
+        const createdProduct = productResponse.data.productCreate.product;
+        console.log('✅ Produto básico criado com sucesso!'.green);
+        console.log('   • ID:', createdProduct.id);
+        console.log('   • Handle:', createdProduct.handle);
+        
+        // PASSO 2: Adicionar variant
+        console.log('📝 Passo 2: Adicionando variant...');
+        
+        const variantMutation = `
+            mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                productVariantsBulkCreate(productId: $productId, variants: $variants) {
+                    productVariants {
+                        id
+                        price
+                        sku
+                        inventoryQuantity
+                    }
+                    userErrors {
+                        field
+                        message
+                    }
+                }
+            }
+        `;
+        
+        const variantInput = {
+            productId: createdProduct.id,
+            variants: [
+                {
+                    price: (product.optFinalPrice || product.pvpr || 0).toString(),
+                    sku: product.ean,
+                    inventoryPolicy: "DENY",
+                    inventoryManagement: "SHOPIFY",
+                    inventoryQuantities: [
+                        {
+                            availableQuantity: tempStock,
+                            locationId: "gid://shopify/Location/84623851786"
+                        }
+                    ]
+                }
+            ]
+        };
+        
+        console.log('📤 Adicionando variant...');
+        console.log('   • Preço:', variantInput.variants[0].price);
+        console.log('   • SKU:', variantInput.variants[0].sku);
+        console.log('   • Stock:', variantInput.variants[0].inventoryQuantities[0].availableQuantity);
+        
+        let variantResponse;
+        try {
+            variantResponse = await shopifyClient.request(variantMutation, variantInput);
+            console.log('📄 Resposta da variant recebida');
+            
+        } catch (variantError) {
+            console.error('❌ Erro na criação da variant:', variantError.message);
+            if (variantError.response) {
+                console.error('📄 Detalhes:', JSON.stringify(variantError.response, null, 2));
+            }
+            // Continuar mesmo com erro na variant
+            console.log('⚠️ Continuando sem variant...');
+        }
+        
+        // Validar resposta da variant
+        if (variantResponse && variantResponse.data && variantResponse.data.productVariantsBulkCreate) {
+            if (variantResponse.data.productVariantsBulkCreate.userErrors && variantResponse.data.productVariantsBulkCreate.userErrors.length > 0) {
+                console.log('❌ Erros na criação da variant:'.yellow);
+                variantResponse.data.productVariantsBulkCreate.userErrors.forEach(error => {
+                    console.log(`   • ${error.field}: ${error.message}`.yellow);
+                });
+            } else if (variantResponse.data.productVariantsBulkCreate.productVariants && variantResponse.data.productVariantsBulkCreate.productVariants.length > 0) {
+                console.log('✅ Variant criada com sucesso!'.green);
+                console.log('   • ID:', variantResponse.data.productVariantsBulkCreate.productVariants[0].id);
+                console.log('   • Preço:', variantResponse.data.productVariantsBulkCreate.productVariants[0].price);
+            }
+        }
+        
+        // PASSO 3: Adicionar imagens (se existirem)
+        if (imageList.length > 0) {
+            console.log('📝 Passo 3: Adicionando imagens...');
+            
+            const imageMutation = `
+                mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+                    productCreateMedia(productId: $productId, media: $media) {
+                        media {
+                            id
+                            alt
+                            ... on MediaImage {
+                                image {
+                                    url
+                                }
+                            }
+                        }
+                        userErrors {
+                            field
+                            message
+                        }
+                    }
+                }
+            `;
+            
+            const mediaInput = {
+                productId: createdProduct.id,
+                media: imageList.map((img, index) => ({
+                    originalSource: img.src,
+                    alt: `${product.name} - Imagem ${index + 1}`,
+                    mediaContentType: "IMAGE"
+                }))
             };
             
-            console.log('📤 Enviando query com variáveis:', JSON.stringify(variables, null, 2));
+            console.log('📤 Adicionando', imageList.length, 'imagens...');
             
-            let response;
             try {
-                response = await shopifyClient.request(productsQuery, { variables });
-                console.log('📄 Resposta recebida (estrutura):', {
-                    hasData: !!response.data,
-                    hasProducts: !!(response.data && response.data.products),
-                    hasEdges: !!(response.data && response.data.products && response.data.products.edges),
-                    edgesLength: response.data && response.data.products && response.data.products.edges ? response.data.products.edges.length : 0
-                });
+                const imageResponse = await shopifyClient.request(imageMutation, mediaInput);
+                console.log('📄 Resposta das imagens recebida');
                 
-            } catch (queryError) {
-                console.error('❌ Erro na query de produtos:', queryError.message);
-                if (queryError.response) {
-                    console.error('📄 Detalhes do erro:', JSON.stringify(queryError.response, null, 2));
-                }
-                throw queryError;
-            }
-            
-            // Validação robusta da resposta
-            if (!response || !response.data) {
-                console.error('❌ Resposta inválida - sem data');
-                break;
-            }
-            
-            if (!response.data.products) {
-                console.error('❌ Resposta inválida - sem products');
-                console.error('📄 response.data:', JSON.stringify(response.data, null, 2));
-                break;
-            }
-            
-            if (!response.data.products.edges) {
-                console.error('❌ Resposta inválida - sem edges');
-                console.error('📄 response.data.products:', JSON.stringify(response.data.products, null, 2));
-                break;
-            }
-            
-            const products = response.data.products.edges;
-            console.log(`📦 ${products.length} produtos recebidos neste lote`);
-            
-            // Processar produtos do lote atual
-            for (const edge of products) {
-                if (!edge || !edge.node) {
-                    console.log('⚠️ Edge inválido encontrado, pulando...');
-                    continue;
+                if (imageResponse && imageResponse.data && imageResponse.data.productCreateMedia) {
+                    if (imageResponse.data.productCreateMedia.userErrors && imageResponse.data.productCreateMedia.userErrors.length > 0) {
+                        console.log('❌ Erros na criação das imagens:'.yellow);
+                        imageResponse.data.productCreateMedia.userErrors.forEach(error => {
+                            console.log(`   • ${error.field}: ${error.message}`.yellow);
+                        });
+                    } else if (imageResponse.data.productCreateMedia.media && imageResponse.data.productCreateMedia.media.length > 0) {
+                        console.log('✅ Imagens adicionadas com sucesso!'.green);
+                        console.log('   • Total:', imageResponse.data.productCreateMedia.media.length);
+                    }
                 }
                 
-                const product = edge.node;
-                
-                // Transformar dados para formato mais simples
-                const processedProduct = {
-                    id: product.id || '',
-                    title: product.title || 'Sem título',
-                    handle: product.handle || '',
-                    status: product.status || 'UNKNOWN',
-                    vendor: product.vendor || '',
-                    productType: product.productType || '',
-                    tags: product.tags || [],
-                    createdAt: product.createdAt || '',
-                    updatedAt: product.updatedAt || '',
-                    variants: (product.variants && product.variants.edges) ? product.variants.edges.map(v => ({
-                        id: v.node.id || '',
-                        title: v.node.title || '',
-                        price: parseFloat(v.node.price) || 0,
-                        sku: v.node.sku || '',
-                        barcode: v.node.barcode || '',
-                        inventoryQuantity: v.node.inventoryQuantity || 0
-                    })) : [],
-                    images: (product.images && product.images.edges) ? product.images.edges.map(img => ({
-                        id: img.node.id || '',
-                        url: img.node.url || '',
-                        altText: img.node.altText || ''
-                    })) : []
-                };
-                
-                allProducts.push(processedProduct);
-                processedCount++;
-                
-                if (processedCount % 10 === 0) {
-                    console.log(`📊 Produtos processados: ${processedCount}`);
+            } catch (imageError) {
+                console.error('❌ Erro na criação das imagens:', imageError.message);
+                if (imageError.response) {
+                    console.error('📄 Detalhes:', JSON.stringify(imageError.response, null, 2));
                 }
+                // Continuar mesmo com erro nas imagens
+                console.log('⚠️ Continuando sem imagens...');
             }
-            
-            // Verificar se há mais páginas
-            hasNextPage = response.data.products.pageInfo.hasNextPage && processedCount < maxProducts;
-            cursor = response.data.products.pageInfo.endCursor;
-            
-            // Rate limiting - pausa entre requests
-            if (hasNextPage) {
-                console.log('⏳ Aguardando 1s antes do próximo lote...');
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+        } else {
+            console.log('📝 Passo 3: Sem imagens para adicionar');
         }
         
-        console.log(`✅ Sincronização concluída!`);
-        console.log(`📊 Total de produtos obtidos: ${allProducts.length}`);
+        console.log('✅ Produto com EAN ' + product.ean + ' foi criado com sucesso!'.green);
+        console.log('   • ID:', createdProduct.id);
+        console.log('   • Handle:', createdProduct.handle);
+        console.log('   • Status:', createdProduct.status);
         
-        // Log de amostra dos primeiros produtos
-        if (allProducts.length > 0) {
-            console.log('📋 Amostra do primeiro produto:');
-            console.log(JSON.stringify(allProducts[0], null, 2));
-        }
-        
-        return allProducts;
+        return createdProduct;
         
     } catch (error) {
-        console.error('❌ Erro ao obter produtos da Shopify:', error.message);
-        console.error('📄 Stack trace:', error.stack);
+        console.log("=".repeat(50).yellow);
+        console.log("ERRO (createProduct) [EAN: " + (product.ean || 'N/A') + " ]: " + error.message.yellow);
+        console.log("=".repeat(50).yellow);
         
-        if (error.response) {
-            console.error('📄 Detalhes da resposta de erro:', JSON.stringify(error.response, null, 2));
+        // Logs adicionais para debugging
+        if (error.stack) {
+            console.log('📄 Stack trace:', error.stack);
         }
         
-        // Sugestões de resolução baseadas no tipo de erro
-        if (error.message.includes('products')) {
-            console.error('💡 Sugestão: Verifique se o Access Token tem permissões para ler produtos');
+        // Sugestões baseadas no tipo de erro
+        if (error.message.includes('Field is not defined')) {
+            console.log('💡 Sugestão: Problema na estrutura GraphQL - campos não suportados');
+        }
+        
+        if (error.message.includes('productCreate')) {
+            console.log('💡 Sugestão: Verifique se a mutation GraphQL está correta');
         }
         
         if (error.message.includes('undefined')) {
-            console.error('💡 Sugestão: Possível problema de API version ou estrutura de resposta');
+            console.log('💡 Sugestão: Possível problema de estrutura de resposta ou permissões');
         }
         
         throw error;
     }
 }
 
-module.exports = getAllProductsFromShopify;
+module.exports = createProductToShopify;
 
