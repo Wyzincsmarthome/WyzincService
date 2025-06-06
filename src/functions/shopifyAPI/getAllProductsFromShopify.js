@@ -9,6 +9,7 @@ function generateProductTags(product) {
         return [];
     }
     
+    // TAG DE MARCA
     let brandTag = '';
     if (product.brand) {
         if (product.brand.toLowerCase() === 'xiaomi' && product.name && product.name.toLowerCase().includes('yeelight')) {
@@ -28,6 +29,7 @@ function generateProductTags(product) {
         if (brandTag) tags.push(brandTag);
     }
     
+    // TAG DE CATEGORIA
     let categoryTag = '';
     const productName = (product.name || '').toLowerCase();
     const productDescription = (product.description || '').toLowerCase();
@@ -93,6 +95,7 @@ function processProductPrices(product) {
     let costPrice = 0;
     let retailPrice = 0;
     
+    // Processar preco de custo
     if (product.price) {
         const priceStr = String(product.price);
         console.log('   Processando price string:', JSON.stringify(priceStr));
@@ -109,6 +112,7 @@ function processProductPrices(product) {
         console.log('   Preco de custo final:', costPrice);
     }
     
+    // Processar PVP
     if (product.pvpr) {
         const pvprStr = String(product.pvpr);
         console.log('   Processando pvpr string:', JSON.stringify(pvprStr));
@@ -127,6 +131,7 @@ function processProductPrices(product) {
         retailPrice = costPrice;
     }
     
+    // Validacao final
     if (costPrice <= 0) {
         console.log('Preco de custo invalido, usando 1 euro');
         costPrice = 1;
@@ -174,7 +179,7 @@ async function getAllProductsFromShopify(shopifyClient) {
         
         let allProducts = [];
         let page = 1;
-        const limit = 50;
+        const limit = 250; // Aumentado para obter mais produtos por página
         
         try {
             while (true) {
@@ -209,6 +214,27 @@ async function getAllProductsFromShopify(shopifyClient) {
         }
         
         console.log('Total de produtos na Shopify:', allProducts.length);
+        
+        // Logging detalhado dos produtos existentes para debug
+        console.log('Primeiros 5 produtos na Shopify (para debug):');
+        for (let i = 0; i < Math.min(5, allProducts.length); i++) {
+            const product = allProducts[i];
+            console.log(`Produto ${i+1}:`);
+            console.log(`   ID: ${product.id}`);
+            console.log(`   Título: ${product.title}`);
+            console.log(`   Handle: ${product.handle}`);
+            console.log(`   Variants: ${product.variants ? product.variants.length : 0}`);
+            
+            if (product.variants && product.variants.length > 0) {
+                for (let j = 0; j < product.variants.length; j++) {
+                    const variant = product.variants[j];
+                    console.log(`      Variant ${j+1}:`);
+                    console.log(`         ID: ${variant.id}`);
+                    console.log(`         SKU: ${variant.sku || 'N/A'}`);
+                    console.log(`         Barcode: ${variant.barcode || 'N/A'}`);
+                }
+            }
+        }
         
         const fs = require('fs');
         const path = require('path');
@@ -288,14 +314,47 @@ async function getAllProductsFromShopify(shopifyClient) {
             
             console.log('Processando EAN ' + processedCount + '/' + localEANs.length + ': ' + ean);
             
-            const existingProduct = allProducts.find(shopifyProduct => {
-                return shopifyProduct.variants && shopifyProduct.variants.some(variant => 
-                    variant.sku === ean || variant.barcode === ean
-                );
-            });
+            // CORREÇÃO: Verificação mais robusta de produtos existentes
+            let existingProduct = null;
+            
+            // Primeiro, procurar por SKU exato
+            for (const product of allProducts) {
+                if (product.variants && product.variants.length > 0) {
+                    const matchingVariant = product.variants.find(variant => 
+                        (variant.sku && variant.sku.trim() === ean.trim()) || 
+                        (variant.barcode && variant.barcode.trim() === ean.trim())
+                    );
+                    
+                    if (matchingVariant) {
+                        existingProduct = product;
+                        console.log('Produto encontrado por SKU/barcode exato:', product.title);
+                        break;
+                    }
+                }
+            }
+            
+            // Se não encontrou por SKU exato, tentar por SKU parcial (contém)
+            if (!existingProduct) {
+                for (const product of allProducts) {
+                    if (product.variants && product.variants.length > 0) {
+                        const matchingVariant = product.variants.find(variant => 
+                            (variant.sku && variant.sku.includes(ean)) || 
+                            (variant.barcode && variant.barcode.includes(ean))
+                        );
+                        
+                        if (matchingVariant) {
+                            existingProduct = product;
+                            console.log('Produto encontrado por SKU/barcode parcial:', product.title);
+                            break;
+                        }
+                    }
+                }
+            }
             
             if (existingProduct) {
                 console.log('Produto ja existe na Shopify (SKU/EAN: ' + ean + ') - atualizando...');
+                console.log('ID do produto existente:', existingProduct.id);
+                console.log('Título do produto existente:', existingProduct.title);
                 
                 try {
                     const getProductFromSupplier = require('../supplierAPI/getProductFromSupplier');
