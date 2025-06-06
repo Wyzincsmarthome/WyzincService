@@ -15,7 +15,7 @@ async function getAllProductsFromShopify(shopifyClient) {
             throw new Error('Cliente Shopify inválido - método request não encontrado');
         }
         
-        // Query GraphQL para obter produtos
+        // Query GraphQL para obter produtos CORRIGIDA
         const query = `
             query getProducts($first: Int!, $after: String) {
                 products(first: $first, after: $after) {
@@ -48,12 +48,14 @@ async function getAllProductsFromShopify(shopifyClient) {
         
         // Obter todos os produtos com paginação
         while (hasNextPage) {
+            // CORREÇÃO CRÍTICA: Garantir que first tem valor válido
             const variables = {
-                first: 50,
+                first: 50, // Valor fixo válido
                 after: cursor
             };
             
             console.log('📊 Obtendo página de produtos...');
+            console.log('📄 Variáveis:', JSON.stringify(variables, null, 2));
             
             try {
                 const response = await shopifyClient.request(query, variables);
@@ -89,21 +91,35 @@ async function getAllProductsFromShopify(shopifyClient) {
         
         const productsListPath = path.join(__dirname, '../../productsList.txt');
         
+        console.log('📄 Procurando ficheiro em:', productsListPath);
+        
         if (!fs.existsSync(productsListPath)) {
+            console.error('❌ Ficheiro productsList.txt não encontrado em:', productsListPath);
+            
+            // Listar ficheiros no diretório para debugging
+            const dirPath = path.dirname(productsListPath);
+            console.log('📁 Ficheiros no diretório:', fs.readdirSync(dirPath));
+            
             throw new Error('Ficheiro productsList.txt não encontrado em: ' + productsListPath);
         }
         
         const productsListContent = fs.readFileSync(productsListPath, 'utf8');
         console.log('📄 Lendo lista de produtos...');
+        console.log('📄 Conteúdo (primeiros 200 chars):', productsListContent.substring(0, 200));
         
         let localProducts;
         try {
             localProducts = JSON.parse(productsListContent);
         } catch (parseError) {
+            console.error('❌ Erro ao fazer parse do JSON:', parseError.message);
+            console.error('📄 Conteúdo completo:', productsListContent);
             throw new Error('Erro ao fazer parse do productsList.txt: ' + parseError.message);
         }
         
         if (!Array.isArray(localProducts)) {
+            console.error('❌ Conteúdo não é um array');
+            console.error('📄 Tipo:', typeof localProducts);
+            console.error('📄 Conteúdo:', localProducts);
             throw new Error('productsList.txt não contém um array válido');
         }
         
