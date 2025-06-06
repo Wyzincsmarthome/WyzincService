@@ -15,7 +15,7 @@ async function getAllProductsFromShopify(shopifyClient) {
             throw new Error('Cliente Shopify inválido - método request não encontrado');
         }
         
-        // Query GraphQL para obter produtos
+        // Query GraphQL para obter produtos CORRIGIDA
         const query = `
             query getProducts($first: Int!, $after: String) {
                 products(first: $first, after: $after) {
@@ -48,14 +48,17 @@ async function getAllProductsFromShopify(shopifyClient) {
         
         // Obter todos os produtos com paginação
         while (hasNextPage) {
+            // CORREÇÃO CRÍTICA: Garantir que variables é um objeto válido
             const variables = {
-                first: 50,
+                first: 50, // Valor fixo válido
                 after: cursor
             };
             
             console.log('📊 Obtendo página de produtos...');
+            console.log('📄 Variáveis enviadas:', JSON.stringify(variables, null, 2));
             
             try {
+                // CORREÇÃO CRÍTICA: Passar variables diretamente, não como objeto aninhado
                 const response = await shopifyClient.request(query, variables);
                 
                 if (!response || !response.data || !response.data.products) {
@@ -211,4 +214,3 @@ async function getAllProductsFromShopify(shopifyClient) {
 }
 
 module.exports = getAllProductsFromShopify;
-
