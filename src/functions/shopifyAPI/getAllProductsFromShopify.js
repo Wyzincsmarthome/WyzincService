@@ -352,7 +352,8 @@ async function getAllProductsFromShopify(shopifyClient) {
                     console.log('❌ Erro ao atualizar produto EAN ' + ean + ':', updateError.message);
                 }
                 
-                skippedCount++; // Contar como processado mas não criado
+                // Delay entre operações
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 continue;
             }
             
@@ -455,5 +456,4 @@ async function updateProductViaREST(restClient, existingProduct, productData) {
         };
         
         console.log('📤 Atualizando produto via REST API...');
-        console.log('   • ID:', existingProduct.id);
-        conso
+        console.log('   •
