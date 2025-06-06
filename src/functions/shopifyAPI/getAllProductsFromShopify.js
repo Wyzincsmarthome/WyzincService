@@ -9,7 +9,6 @@ function generateProductTags(product) {
         return [];
     }
     
-    // TAG DE MARCA
     let brandTag = '';
     if (product.brand) {
         if (product.brand.toLowerCase() === 'xiaomi' && product.name && product.name.toLowerCase().includes('yeelight')) {
@@ -29,7 +28,6 @@ function generateProductTags(product) {
         if (brandTag) tags.push(brandTag);
     }
     
-    // TAG DE CATEGORIA
     let categoryTag = '';
     const productName = (product.name || '').toLowerCase();
     const productDescription = (product.description || '').toLowerCase();
@@ -95,7 +93,6 @@ function processProductPrices(product) {
     let costPrice = 0;
     let retailPrice = 0;
     
-    // Processar preco de custo
     if (product.price) {
         const priceStr = String(product.price);
         console.log('   Processando price string:', JSON.stringify(priceStr));
@@ -112,7 +109,6 @@ function processProductPrices(product) {
         console.log('   Preco de custo final:', costPrice);
     }
     
-    // Processar PVP
     if (product.pvpr) {
         const pvprStr = String(product.pvpr);
         console.log('   Processando pvpr string:', JSON.stringify(pvprStr));
@@ -131,7 +127,6 @@ function processProductPrices(product) {
         retailPrice = costPrice;
     }
     
-    // Validacao final
     if (costPrice <= 0) {
         console.log('Preco de custo invalido, usando 1 euro');
         costPrice = 1;
@@ -480,4 +475,65 @@ async function createProductViaREST(restClient, product) {
         
         const productData = {
             product: {
-                title: product.
+                title: product.name,
+                body_html: (product.short_description || '') + "\n\n" + (product.description || ''),
+                vendor: product.brand || '',
+                product_type: product.family || '',
+                tags: tags.join(', '),
+                status: 'active',
+                variants: [
+                    {
+                        price: retailPrice.toFixed(2),
+                        compare_at_price: null,
+                        cost: costPrice.toFixed(2),
+                        sku: product.ean,
+                        barcode: product.ean,
+                        inventory_management: 'shopify',
+                        inventory_policy: 'deny',
+                        inventory_quantity: inventory_quantity
+                    }
+                ]
+            }
+        };
+        
+        if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+            productData.product.images = product.images.map((img, index) => ({
+                src: img,
+                alt: `${product.name} - Imagem ${index + 1}`
+            }));
+        }
+        
+        console.log('Enviando produto via REST API...');
+        console.log('   Titulo:', productData.product.title);
+        console.log('   Preco de venda (PVP):', productData.product.variants[0].price + ' euros');
+        console.log('   Preco de custo:', productData.product.variants[0].cost + ' euros');
+        console.log('   SKU:', productData.product.variants[0].sku);
+        console.log('   EAN (barcode):', productData.product.variants[0].barcode);
+        console.log('   Stock:', productData.product.variants[0].inventory_quantity);
+        console.log('   Tags:', productData.product.tags);
+        console.log('   Imagens:', productData.product.images ? productData.product.images.length : 0);
+        
+        const response = await restClient.post('/products.json', productData);
+        
+        if (response.data && response.data.product) {
+            console.log('Produto criado com sucesso via REST API!');
+            console.log('   ID:', response.data.product.id);
+            console.log('   Handle:', response.data.product.handle);
+            console.log('   Tags aplicadas:', response.data.product.tags);
+            console.log('   Preco final:', response.data.product.variants[0].price + ' euros');
+            return response.data.product;
+        } else {
+            throw new Error('Resposta invalida da REST API');
+        }
+        
+    } catch (error) {
+        console.log('Erro na criacao via REST API:', error.message);
+        if (error.response && error.response.data) {
+            console.log('Detalhes do erro:', JSON.stringify(error.response.data, null, 2));
+        }
+        throw error;
+    }
+}
+
+module.exports = getAllProductsFromShopify;
+
