@@ -1,6 +1,9 @@
 require('colors');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
+// Função para gerar tags de produto
 function generateProductTags(product) {
     const tags = [];
     
@@ -87,6 +90,7 @@ function generateProductTags(product) {
     return tags;
 }
 
+// Função para processar preços
 function processProductPrices(product) {
     console.log('Processando precos...');
     console.log('   Preco original (price):', product.price);
@@ -148,7 +152,7 @@ function processProductPrices(product) {
     return { costPrice, retailPrice };
 }
 
-// NOVA FUNÇÃO: Processar stock do fornecedor corretamente
+// Função para processar stock
 function processStock(stockString) {
     console.log('Processando stock:', stockString);
     
@@ -206,6 +210,47 @@ function processStock(stockString) {
     return 0;
 }
 
+// Função para verificar se um produto já existe na Shopify
+async function checkProductExists(restClient, ean) {
+    try {
+        console.log(`Verificando se produto com EAN ${ean} já existe na Shopify...`);
+        
+        // Buscar produtos por SKU usando a API de busca
+        try {
+            const skuResponse = await restClient.get('/products.json', {
+                params: {
+                    limit: 1,
+                    fields: 'id,title,variants'
+                }
+            });
+            
+            // Verificar se algum produto tem o SKU ou barcode correspondente
+            if (skuResponse.data && skuResponse.data.products) {
+                for (const product of skuResponse.data.products) {
+                    if (product.variants && product.variants.length > 0) {
+                        for (const variant of product.variants) {
+                            if ((variant.sku && variant.sku.trim() === ean.trim()) ||
+                                (variant.barcode && variant.barcode.trim() === ean.trim())) {
+                                console.log(`Produto encontrado: ${product.title} (ID: ${product.id})`);
+                                return product;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (searchError) {
+            console.log(`Erro na busca por produtos: ${searchError.message}`);
+        }
+        
+        console.log(`Nenhum produto encontrado com EAN ${ean}`);
+        return null;
+    } catch (error) {
+        console.log(`Erro ao verificar existência do produto: ${error.message}`);
+        return null;
+    }
+}
+
+// Função principal
 async function getAllProductsFromShopify(shopifyClient) {
     try {
         console.log('Obtendo produtos da Shopify via REST API...');
@@ -225,6 +270,7 @@ async function getAllProductsFromShopify(shopifyClient) {
             storeDomain = storeDomain + '.myshopify.com';
         }
         
+        // Criar cliente REST
         const restClient = axios.create({
             baseURL: `https://${storeDomain}/admin/api/2024-07`,
             headers: {
@@ -233,81 +279,20 @@ async function getAllProductsFromShopify(shopifyClient) {
             }
         });
         
-        console.log('Obtendo produtos via REST API...');
-        
-        // CORREÇÃO: Obter TODOS os produtos da loja para evitar duplicação
-        let allProducts = [];
-        let page = 1;
-        const limit = 250; // Máximo permitido pela API
-        
+        // Testar conexão
         try {
-            while (true) {
-                console.log(`Obtendo página ${page} de produtos (${limit} por página)...`);
-                
-                const response = await restClient.get('/products.json', {
-                    params: {
-                        limit: limit,
-                        page: page,
-                        fields: 'id,title,handle,variants,tags'
-                    }
-                });
-                
-                if (!response.data || !response.data.products) {
-                    console.log('Resposta inválida da REST API');
-                    break;
-                }
-                
-                const products = response.data.products;
-                allProducts = allProducts.concat(products);
-                
-                console.log(`Produtos obtidos na página ${page}:`, products.length);
-                
-                if (products.length < limit) {
-                    console.log('Última página alcançada');
-                    break;
-                }
-                
-                page++;
-                
-                // Pequena pausa para evitar rate limiting
-                await new Promise(resolve => setTimeout(resolve, 500));
+            const shopResponse = await restClient.get('/shop.json');
+            console.log(`Conexão com Shopify estabelecida: ${shopResponse.data.shop.name}`);
+        } catch (connectionError) {
+            console.log(`Erro ao conectar com Shopify: ${connectionError.message}`);
+            if (connectionError.response) {
+                console.log(`Status: ${connectionError.response.status}`);
+                console.log(`Dados: ${JSON.stringify(connectionError.response.data)}`);
             }
-            
-        } catch (restError) {
-            console.log('Erro na REST API, continuando sem produtos existentes:', restError.message);
-            if (restError.response) {
-                console.log('Detalhes do erro:', JSON.stringify(restError.response.data, null, 2));
-            }
-            allProducts = [];
+            throw new Error(`Falha na conexão com Shopify: ${connectionError.message}`);
         }
         
-        console.log('Total de produtos na Shopify:', allProducts.length);
-        
-        // Logging detalhado dos produtos existentes para debug
-        console.log('Primeiros 5 produtos na Shopify (para debug):');
-        for (let i = 0; i < Math.min(5, allProducts.length); i++) {
-            const product = allProducts[i];
-            console.log(`Produto ${i+1}:`);
-            console.log(`   ID: ${product.id}`);
-            console.log(`   Título: ${product.title}`);
-            console.log(`   Handle: ${product.handle}`);
-            console.log(`   Tags: ${product.tags || 'N/A'}`);
-            console.log(`   Variants: ${product.variants ? product.variants.length : 0}`);
-            
-            if (product.variants && product.variants.length > 0) {
-                for (let j = 0; j < product.variants.length; j++) {
-                    const variant = product.variants[j];
-                    console.log(`      Variant ${j+1}:`);
-                    console.log(`         ID: ${variant.id}`);
-                    console.log(`         SKU: ${variant.sku || 'N/A'}`);
-                    console.log(`         Barcode: ${variant.barcode || 'N/A'}`);
-                }
-            }
-        }
-        
-        const fs = require('fs');
-        const path = require('path');
-        
+        // Ler lista de EANs
         const productsListPath = path.join(__dirname, '../../productsList.txt');
         
         console.log('Procurando lista de EANs em:', productsListPath);
@@ -321,6 +306,7 @@ async function getAllProductsFromShopify(shopifyClient) {
         console.log('Lendo lista de EANs...');
         console.log('Conteudo (primeiros 200 chars):', productsListContent.substring(0, 200));
         
+        // Processar lista de EANs
         let localEANs;
         try {
             if (productsListContent.trim().startsWith('[')) {
@@ -373,24 +359,7 @@ async function getAllProductsFromShopify(shopifyClient) {
             };
         }
         
-        // CORREÇÃO: Criar mapa de produtos por EAN para busca mais eficiente
-        const productsByEAN = new Map();
-        
-        for (const product of allProducts) {
-            if (product.variants && product.variants.length > 0) {
-                for (const variant of product.variants) {
-                    if (variant.sku) {
-                        productsByEAN.set(variant.sku.trim(), product);
-                    }
-                    if (variant.barcode) {
-                        productsByEAN.set(variant.barcode.trim(), product);
-                    }
-                }
-            }
-        }
-        
-        console.log(`Mapa de produtos por EAN criado com ${productsByEAN.size} entradas`);
-        
+        // Processar cada EAN
         let processedCount = 0;
         let successCount = 0;
         let errorCount = 0;
@@ -401,8 +370,8 @@ async function getAllProductsFromShopify(shopifyClient) {
             
             console.log('Processando EAN ' + processedCount + '/' + localEANs.length + ': ' + ean);
             
-            // CORREÇÃO: Busca eficiente por EAN usando o mapa
-            const existingProduct = productsByEAN.get(ean.trim());
+            // Verificar se produto já existe
+            const existingProduct = await checkProductExists(restClient, ean);
             
             if (existingProduct) {
                 console.log('Produto ja existe na Shopify (SKU/EAN: ' + ean + ') - atualizando...');
@@ -486,6 +455,7 @@ async function getAllProductsFromShopify(shopifyClient) {
     }
 }
 
+// Função para atualizar produto existente
 async function updateProductViaREST(restClient, existingProduct, productData) {
     try {
         console.log('Atualizando produto via REST API:', productData.name);
@@ -493,7 +463,7 @@ async function updateProductViaREST(restClient, existingProduct, productData) {
         const { costPrice, retailPrice } = processProductPrices(productData);
         const tags = generateProductTags(productData);
         
-        // CORREÇÃO: Usar a nova função de processamento de stock
+        // Processar stock
         const inventory_quantity = processStock(productData.stock);
         
         const productUpdateData = {
@@ -551,6 +521,7 @@ async function updateProductViaREST(restClient, existingProduct, productData) {
     }
 }
 
+// Função para criar novo produto
 async function createProductViaREST(restClient, product) {
     try {
         console.log('Criando produto via REST API:', product.name);
@@ -558,7 +529,7 @@ async function createProductViaREST(restClient, product) {
         const { costPrice, retailPrice } = processProductPrices(product);
         const tags = generateProductTags(product);
         
-        // CORREÇÃO: Usar a nova função de processamento de stock
+        // Processar stock
         const inventory_quantity = processStock(product.stock);
         
         const productData = {
