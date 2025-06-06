@@ -3,7 +3,6 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-// Função para gerar tags de produto
 function generateProductTags(product) {
     const tags = [];
     
@@ -12,7 +11,6 @@ function generateProductTags(product) {
         return [];
     }
     
-    // TAG DE MARCA
     let brandTag = '';
     if (product.brand) {
         if (product.brand.toLowerCase() === 'xiaomi' && product.name && product.name.toLowerCase().includes('yeelight')) {
@@ -32,7 +30,6 @@ function generateProductTags(product) {
         if (brandTag) tags.push(brandTag);
     }
     
-    // TAG DE CATEGORIA
     let categoryTag = '';
     const productName = (product.name || '').toLowerCase();
     const productDescription = (product.description || '').toLowerCase();
@@ -90,7 +87,6 @@ function generateProductTags(product) {
     return tags;
 }
 
-// Função para processar preços
 function processProductPrices(product) {
     console.log('Processando precos...');
     console.log('   Preco original (price):', product.price);
@@ -99,7 +95,6 @@ function processProductPrices(product) {
     let costPrice = 0;
     let retailPrice = 0;
     
-    // Processar preco de custo
     if (product.price) {
         const priceStr = String(product.price);
         console.log('   Processando price string:', JSON.stringify(priceStr));
@@ -116,7 +111,6 @@ function processProductPrices(product) {
         console.log('   Preco de custo final:', costPrice);
     }
     
-    // Processar PVP
     if (product.pvpr) {
         const pvprStr = String(product.pvpr);
         console.log('   Processando pvpr string:', JSON.stringify(pvprStr));
@@ -135,7 +129,6 @@ function processProductPrices(product) {
         retailPrice = costPrice;
     }
     
-    // Validacao final
     if (costPrice <= 0) {
         console.log('Preco de custo invalido, usando 1 euro');
         costPrice = 1;
@@ -152,22 +145,20 @@ function processProductPrices(product) {
     return { costPrice, retailPrice };
 }
 
-// Função para processar stock
 function processStock(stockString) {
     console.log('Processando stock:', stockString);
     
     if (!stockString) {
-        console.log('   Stock não definido, definindo como 0');
+        console.log('   Stock nao definido, definindo como 0');
         return 0;
     }
     
     const stockLower = stockString.toLowerCase();
     
-    // Verificar se está sem stock
     if (
         stockLower.includes('sem stock') || 
         stockLower.includes('indisponivel') || 
-        stockLower.includes('indisponível') ||
+        stockLower.includes('indisponivel') ||
         stockLower.includes('esgotado') ||
         stockLower.includes('ruptura')
     ) {
@@ -175,7 +166,6 @@ function processStock(stockString) {
         return 0;
     }
     
-    // Verificar stock reduzido
     if (
         stockLower.includes('reduzido') || 
         stockLower.includes('< 2') ||
@@ -185,17 +175,15 @@ function processStock(stockString) {
         return 1;
     }
     
-    // Verificar stock disponível mas limitado
     if (
         stockLower.includes('disponivel') || 
-        stockLower.includes('disponível') ||
+        stockLower.includes('disponivel') ||
         stockLower.includes('< 10')
     ) {
-        console.log('   Stock disponível limitado, definindo como 5');
+        console.log('   Stock disponivel limitado, definindo como 5');
         return 5;
     }
     
-    // Verificar stock abundante
     if (
         stockLower.includes('abundante') || 
         stockLower.includes('> 10') ||
@@ -205,24 +193,21 @@ function processStock(stockString) {
         return 20;
     }
     
-    // Valor padrão para casos não identificados
-    console.log('   Padrão de stock não reconhecido, definindo como 0 por segurança');
+    console.log('   Padrao de stock nao reconhecido, definindo como 0 por seguranca');
     return 0;
 }
 
-// Função para verificar se um produto já existe na Shopify
 async function checkProductExists(restClient, ean) {
     try {
-        console.log(`Verificando se produto com EAN ${ean} já existe na Shopify...`);
+        console.log('Verificando se produto com EAN ' + ean + ' ja existe na Shopify...');
         
-        // Buscar TODOS os produtos da loja para verificação completa
         let allProducts = [];
         let sinceId = null;
         let pageCount = 0;
         
         console.log('Carregando todos os produtos da Shopify para verificacao...');
         
-        while (pageCount < 10) { // Limite de segurança para evitar loops infinitos
+        while (pageCount < 10) {
             pageCount++;
             
             const params = {
@@ -234,61 +219,56 @@ async function checkProductExists(restClient, ean) {
                 params.since_id = sinceId;
             }
             
-            console.log(`Carregando página ${pageCount} de produtos...`);
+            console.log('Carregando pagina ' + pageCount + ' de produtos...');
             
             try {
                 const response = await restClient.get('/products.json', { params });
                 
                 if (!response.data || !response.data.products || response.data.products.length === 0) {
-                    console.log('Nenhum produto encontrado nesta página - fim da busca');
+                    console.log('Nenhum produto encontrado nesta pagina - fim da busca');
                     break;
                 }
                 
-                console.log(`Produtos encontrados na página ${pageCount}: ${response.data.products.length}`);
+                console.log('Produtos encontrados na pagina ' + pageCount + ': ' + response.data.products.length);
                 allProducts = allProducts.concat(response.data.products);
                 
-                // Atualizar since_id para próxima página
                 const lastProduct = response.data.products[response.data.products.length - 1];
                 sinceId = lastProduct.id;
                 
-                // Se retornou menos que o limite, é a última página
                 if (response.data.products.length < 250) {
-                    console.log('Última página alcançada');
+                    console.log('Ultima pagina alcancada');
                     break;
                 }
                 
-                // Pequena pausa para não sobrecarregar a API
                 await new Promise(resolve => setTimeout(resolve, 500));
                 
             } catch (pageError) {
-                console.log(`Erro ao carregar página ${pageCount}:`, pageError.message);
+                console.log('Erro ao carregar pagina ' + pageCount + ':', pageError.message);
                 break;
             }
         }
         
-        console.log(`Total de produtos carregados: ${allProducts.length}`);
+        console.log('Total de produtos carregados: ' + allProducts.length);
         
-        // Mostrar alguns produtos para debug
         console.log('Primeiros 3 produtos para debug:');
         for (let i = 0; i < Math.min(3, allProducts.length); i++) {
             const product = allProducts[i];
-            console.log(`Produto ${i + 1}:`);
-            console.log(`   ID: ${product.id}`);
-            console.log(`   Título: ${product.title}`);
-            console.log(`   Variants: ${product.variants ? product.variants.length : 0}`);
+            console.log('Produto ' + (i + 1) + ':');
+            console.log('   ID: ' + product.id);
+            console.log('   Titulo: ' + product.title);
+            console.log('   Variants: ' + (product.variants ? product.variants.length : 0));
             
             if (product.variants && product.variants.length > 0) {
                 for (let j = 0; j < product.variants.length; j++) {
                     const variant = product.variants[j];
-                    console.log(`      Variant ${j + 1}:`);
-                    console.log(`         SKU: ${variant.sku || 'N/A'}`);
-                    console.log(`         Barcode: ${variant.barcode || 'N/A'}`);
+                    console.log('      Variant ' + (j + 1) + ':');
+                    console.log('         SKU: ' + (variant.sku || 'N/A'));
+                    console.log('         Barcode: ' + (variant.barcode || 'N/A'));
                 }
             }
         }
         
-        // Procurar produto com o EAN específico
-        console.log(`Procurando produto com EAN: ${ean}`);
+        console.log('Procurando produto com EAN: ' + ean);
         
         for (const product of allProducts) {
             if (product.variants && product.variants.length > 0) {
@@ -297,24 +277,24 @@ async function checkProductExists(restClient, ean) {
                     const variantBarcode = variant.barcode ? variant.barcode.trim() : '';
                     const searchEan = ean.trim();
                     
-                    console.log(`Comparando EAN ${searchEan} com:`);
-                    console.log(`   SKU: "${variantSku}"`);
-                    console.log(`   Barcode: "${variantBarcode}"`);
+                    console.log('Comparando EAN ' + searchEan + ' com:');
+                    console.log('   SKU: "' + variantSku + '"');
+                    console.log('   Barcode: "' + variantBarcode + '"');
                     
                     if (variantSku === searchEan || variantBarcode === searchEan) {
-                        console.log(`PRODUTO ENCONTRADO! ${product.title} (ID: ${product.id})`);
-                        console.log(`   Encontrado por: ${variantSku === searchEan ? 'SKU' : 'Barcode'}`);
+                        console.log('PRODUTO ENCONTRADO! ' + product.title + ' (ID: ' + product.id + ')');
+                        console.log('   Encontrado por: ' + (variantSku === searchEan ? 'SKU' : 'Barcode'));
                         return product;
                     }
                 }
             }
         }
         
-        console.log(`Nenhum produto encontrado com EAN ${ean} após verificar ${allProducts.length} produtos`);
+        console.log('Nenhum produto encontrado com EAN ' + ean + ' apos verificar ' + allProducts.length + ' produtos');
         return null;
         
     } catch (error) {
-        console.log(`Erro ao verificar existência do produto: ${error.message}`);
+        console.log('Erro ao verificar existencia do produto: ' + error.message);
         if (error.response && error.response.data) {
             console.log('Detalhes do erro:', JSON.stringify(error.response.data, null, 2));
         }
@@ -322,7 +302,6 @@ async function checkProductExists(restClient, ean) {
     }
 }
 
-// Função principal
 async function getAllProductsFromShopify(shopifyClient) {
     try {
         console.log('Obtendo produtos da Shopify via REST API...');
@@ -342,29 +321,26 @@ async function getAllProductsFromShopify(shopifyClient) {
             storeDomain = storeDomain + '.myshopify.com';
         }
         
-        // Criar cliente REST
         const restClient = axios.create({
-            baseURL: `https://${storeDomain}/admin/api/2024-07`,
+            baseURL: 'https://' + storeDomain + '/admin/api/2024-07',
             headers: {
                 'X-Shopify-Access-Token': accessToken,
                 'Content-Type': 'application/json'
             }
         });
         
-        // Testar conexão
         try {
             const shopResponse = await restClient.get('/shop.json');
-            console.log(`Conexão com Shopify estabelecida: ${shopResponse.data.shop.name}`);
+            console.log('Conexao com Shopify estabelecida: ' + shopResponse.data.shop.name);
         } catch (connectionError) {
-            console.log(`Erro ao conectar com Shopify: ${connectionError.message}`);
+            console.log('Erro ao conectar com Shopify: ' + connectionError.message);
             if (connectionError.response) {
-                console.log(`Status: ${connectionError.response.status}`);
-                console.log(`Dados: ${JSON.stringify(connectionError.response.data)}`);
+                console.log('Status: ' + connectionError.response.status);
+                console.log('Dados: ' + JSON.stringify(connectionError.response.data));
             }
-            throw new Error(`Falha na conexão com Shopify: ${connectionError.message}`);
+            throw new Error('Falha na conexao com Shopify: ' + connectionError.message);
         }
         
-        // Ler lista de EANs
         const productsListPath = path.join(__dirname, '../../productsList.txt');
         
         console.log('Procurando lista de EANs em:', productsListPath);
@@ -378,7 +354,6 @@ async function getAllProductsFromShopify(shopifyClient) {
         console.log('Lendo lista de EANs...');
         console.log('Conteudo (primeiros 200 chars):', productsListContent.substring(0, 200));
         
-        // Processar lista de EANs
         let localEANs;
         try {
             if (productsListContent.trim().startsWith('[')) {
@@ -431,7 +406,6 @@ async function getAllProductsFromShopify(shopifyClient) {
             };
         }
         
-        // Processar cada EAN
         let processedCount = 0;
         let successCount = 0;
         let errorCount = 0;
@@ -442,13 +416,12 @@ async function getAllProductsFromShopify(shopifyClient) {
             
             console.log('Processando EAN ' + processedCount + '/' + localEANs.length + ': ' + ean);
             
-            // Verificar se produto já existe
             const existingProduct = await checkProductExists(restClient, ean);
             
             if (existingProduct) {
                 console.log('Produto ja existe na Shopify (SKU/EAN: ' + ean + ') - atualizando...');
                 console.log('ID do produto existente:', existingProduct.id);
-                console.log('Título do produto existente:', existingProduct.title);
+                console.log('Titulo do produto existente:', existingProduct.title);
                 
                 try {
                     const getProductFromSupplier = require('../supplierAPI/getProductFromSupplier');
@@ -479,4 +452,192 @@ async function getAllProductsFromShopify(shopifyClient) {
             console.log('Produto nao existe na Shopify - obtendo dados da Suprides...');
             
             try {
-                const getProductFr
+                const getProductFromSupplier = require('../supplierAPI/getProductFromSupplier');
+                console.log('Consultando API Suprides para EAN:', ean);
+                const productData = await getProductFromSupplier(ean);
+                
+                if (!productData) {
+                    console.log('Produto nao encontrado na API Suprides para EAN:', ean);
+                    errorCount++;
+                    continue;
+                }
+                
+                console.log('Dados obtidos da Suprides:', productData.name || 'Nome nao disponivel');
+                
+                await createProductViaREST(restClient, productData);
+                successCount++;
+                console.log('Produto criado com sucesso na Shopify!');
+                
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+            } catch (createError) {
+                errorCount++;
+                console.log('Erro ao processar EAN ' + ean + ':', createError.message);
+                
+                if (createError.message.includes('API do fornecedor')) {
+                    console.log('Sugestao: Verificar credenciais da API Suprides (API_USER, API_PASSWORD, API_TOKEN)');
+                }
+            }
+        }
+        
+        console.log('Sincronizacao concluida!');
+        console.log('   Total processados:', processedCount);
+        console.log('   Sucessos:', successCount);
+        console.log('   Erros:', errorCount);
+        console.log('   Ignorados (vazios/existentes):', skippedCount);
+        console.log('   Taxa de sucesso:', ((successCount / Math.max(processedCount - skippedCount, 1)) * 100).toFixed(1) + '%');
+        
+        return {
+            processed: processedCount,
+            success: successCount,
+            errors: errorCount,
+            skipped: skippedCount
+        };
+        
+    } catch (error) {
+        console.log('Erro fatal na sincronizacao:', error.message);
+        throw error;
+    }
+}
+
+async function updateProductViaREST(restClient, existingProduct, productData) {
+    try {
+        console.log('Atualizando produto via REST API:', productData.name);
+        
+        const priceResult = processProductPrices(productData);
+        const costPrice = priceResult.costPrice;
+        const retailPrice = priceResult.retailPrice;
+        const tags = generateProductTags(productData);
+        
+        const inventory_quantity = processStock(productData.stock);
+        
+        const productUpdateData = {
+            product: {
+                id: existingProduct.id,
+                title: productData.name,
+                body_html: (productData.short_description || '') + '\n\n' + (productData.description || ''),
+                vendor: productData.brand || '',
+                product_type: productData.family || '',
+                tags: tags.join(', ')
+            }
+        };
+        
+        console.log('Atualizando produto via REST API...');
+        console.log('   ID:', existingProduct.id);
+        console.log('   Titulo:', productUpdateData.product.title);
+        console.log('   Tags:', productUpdateData.product.tags);
+        
+        const productResponse = await restClient.put('/products/' + existingProduct.id + '.json', productUpdateData);
+        
+        if (existingProduct.variants && existingProduct.variants.length > 0) {
+            const variantId = existingProduct.variants[0].id;
+            
+            const variantUpdateData = {
+                variant: {
+                    id: variantId,
+                    price: retailPrice.toFixed(2),
+                    cost: costPrice.toFixed(2),
+                    inventory_quantity: inventory_quantity,
+                    sku: productData.ean,
+                    barcode: productData.ean
+                }
+            };
+            
+            console.log('Atualizando variant via REST API...');
+            console.log('   Variant ID:', variantId);
+            console.log('   Preco de venda (PVP):', variantUpdateData.variant.price + ' euros');
+            console.log('   Preco de custo:', variantUpdateData.variant.cost + ' euros');
+            console.log('   Stock:', variantUpdateData.variant.inventory_quantity);
+            
+            const variantResponse = await restClient.put('/variants/' + variantId + '.json', variantUpdateData);
+            
+            console.log('Produto e variant atualizados com sucesso via REST API!');
+            console.log('   Preco final:', variantResponse.data.variant.price + ' euros');
+        }
+        
+        return productResponse.data.product;
+        
+    } catch (error) {
+        console.log('Erro na atualizacao via REST API:', error.message);
+        if (error.response && error.response.data) {
+            console.log('Detalhes do erro:', JSON.stringify(error.response.data, null, 2));
+        }
+        throw error;
+    }
+}
+
+async function createProductViaREST(restClient, product) {
+    try {
+        console.log('Criando produto via REST API:', product.name);
+        
+        const priceResult = processProductPrices(product);
+        const costPrice = priceResult.costPrice;
+        const retailPrice = priceResult.retailPrice;
+        const tags = generateProductTags(product);
+        
+        const inventory_quantity = processStock(product.stock);
+        
+        const productData = {
+            product: {
+                title: product.name,
+                body_html: (product.short_description || '') + '\n\n' + (product.description || ''),
+                vendor: product.brand || '',
+                product_type: product.family || '',
+                tags: tags.join(', '),
+                status: 'active',
+                variants: [
+                    {
+                        price: retailPrice.toFixed(2),
+                        compare_at_price: null,
+                        cost: costPrice.toFixed(2),
+                        sku: product.ean,
+                        barcode: product.ean,
+                        inventory_management: 'shopify',
+                        inventory_policy: 'deny',
+                        inventory_quantity: inventory_quantity
+                    }
+                ]
+            }
+        };
+        
+        if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+            productData.product.images = product.images.map((img, index) => ({
+                src: img,
+                alt: product.name + ' - Imagem ' + (index + 1)
+            }));
+        }
+        
+        console.log('Enviando produto via REST API...');
+        console.log('   Titulo:', productData.product.title);
+        console.log('   Preco de venda (PVP):', productData.product.variants[0].price + ' euros');
+        console.log('   Preco de custo:', productData.product.variants[0].cost + ' euros');
+        console.log('   SKU:', productData.product.variants[0].sku);
+        console.log('   EAN (barcode):', productData.product.variants[0].barcode);
+        console.log('   Stock:', productData.product.variants[0].inventory_quantity);
+        console.log('   Tags:', productData.product.tags);
+        console.log('   Imagens:', productData.product.images ? productData.product.images.length : 0);
+        
+        const response = await restClient.post('/products.json', productData);
+        
+        if (response.data && response.data.product) {
+            console.log('Produto criado com sucesso via REST API!');
+            console.log('   ID:', response.data.product.id);
+            console.log('   Handle:', response.data.product.handle);
+            console.log('   Tags aplicadas:', response.data.product.tags);
+            console.log('   Preco final:', response.data.product.variants[0].price + ' euros');
+            return response.data.product;
+        } else {
+            throw new Error('Resposta invalida da REST API');
+        }
+        
+    } catch (error) {
+        console.log('Erro na criacao via REST API:', error.message);
+        if (error.response && error.response.data) {
+            console.log('Detalhes do erro:', JSON.stringify(error.response.data, null, 2));
+        }
+        throw error;
+    }
+}
+
+module.exports = getAllProductsFromShopify;
+
