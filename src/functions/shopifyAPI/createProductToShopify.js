@@ -182,7 +182,8 @@ async function createProductToShopify(shopifyClient, product) {
             }
         `;
         
-        const productInput = {
+        // CORREÇÃO CRÍTICA: Estrutura correta das variáveis GraphQL
+        const productVariables = {
             input: {
                 title: product.name,
                 descriptionHtml: (product.short_description || '') + "\\n\\n" + (product.description || ''),
@@ -194,14 +195,16 @@ async function createProductToShopify(shopifyClient, product) {
         };
         
         console.log('📤 Criando produto básico...');
-        console.log('   • Título:', productInput.input.title);
-        console.log('   • Tipo:', productInput.input.productType);
-        console.log('   • Tags:', productInput.input.tags);
-        console.log('   • Vendor:', productInput.input.vendor);
+        console.log('   • Título:', productVariables.input.title);
+        console.log('   • Tipo:', productVariables.input.productType);
+        console.log('   • Tags:', productVariables.input.tags);
+        console.log('   • Vendor:', productVariables.input.vendor);
+        console.log('📄 Variáveis enviadas:', JSON.stringify(productVariables, null, 2));
         
         let productResponse;
         try {
-            productResponse = await shopifyClient.request(productMutation, productInput);
+            // CORREÇÃO CRÍTICA: Passar variáveis diretamente
+            productResponse = await shopifyClient.request(productMutation, productVariables);
             console.log('📄 Resposta do produto básico recebida');
             
         } catch (productError) {
@@ -265,11 +268,12 @@ async function createProductToShopify(shopifyClient, product) {
             }
         `;
         
-        const variantInput = {
+        // CORREÇÃO CRÍTICA: Estrutura correta das variáveis GraphQL
+        const variantVariables = {
             productId: createdProduct.id,
             variants: [
                 {
-                    price: (product.optFinalPrice || product.pvpr || 0).toString(),
+                    price: (product.price || product.pvpr || 0).toString(),
                     sku: product.ean,
                     inventoryPolicy: "DENY",
                     inventoryManagement: "SHOPIFY",
@@ -284,13 +288,14 @@ async function createProductToShopify(shopifyClient, product) {
         };
         
         console.log('📤 Adicionando variant...');
-        console.log('   • Preço:', variantInput.variants[0].price);
-        console.log('   • SKU:', variantInput.variants[0].sku);
-        console.log('   • Stock:', variantInput.variants[0].inventoryQuantities[0].availableQuantity);
+        console.log('   • Preço:', variantVariables.variants[0].price);
+        console.log('   • SKU:', variantVariables.variants[0].sku);
+        console.log('   • Stock:', variantVariables.variants[0].inventoryQuantities[0].availableQuantity);
         
         let variantResponse;
         try {
-            variantResponse = await shopifyClient.request(variantMutation, variantInput);
+            // CORREÇÃO CRÍTICA: Passar variáveis diretamente
+            variantResponse = await shopifyClient.request(variantMutation, variantVariables);
             console.log('📄 Resposta da variant recebida');
             
         } catch (variantError) {
@@ -340,7 +345,8 @@ async function createProductToShopify(shopifyClient, product) {
                 }
             `;
             
-            const mediaInput = {
+            // CORREÇÃO CRÍTICA: Estrutura correta das variáveis GraphQL
+            const mediaVariables = {
                 productId: createdProduct.id,
                 media: imageList.map((img, index) => ({
                     originalSource: img.src,
@@ -352,7 +358,8 @@ async function createProductToShopify(shopifyClient, product) {
             console.log('📤 Adicionando', imageList.length, 'imagens...');
             
             try {
-                const imageResponse = await shopifyClient.request(imageMutation, mediaInput);
+                // CORREÇÃO CRÍTICA: Passar variáveis diretamente
+                const imageResponse = await shopifyClient.request(imageMutation, mediaVariables);
                 console.log('📄 Resposta das imagens recebida');
                 
                 if (imageResponse && imageResponse.data && imageResponse.data.productCreateMedia) {
@@ -434,4 +441,4 @@ async function createProductToShopify(shopifyClient, product) {
 }
 
 module.exports = createProductToShopify;
-
+                
