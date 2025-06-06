@@ -162,6 +162,7 @@ async function getAllProductsFromShopify(shopifyClient) {
         } catch (restError) {
             console.log('⚠️ Erro na REST API, continuando sem produtos existentes:', restError.message);
             // Continuar mesmo sem conseguir obter produtos existentes
+            allProducts = []; // CORREÇÃO: Garantir que é array
         }
         
         console.log('📊 Total de produtos na Shopify:', allProducts.length);
@@ -196,7 +197,16 @@ async function getAllProductsFromShopify(shopifyClient) {
                 localEANs = productsListContent
                     .split('\\n')
                     .map(line => line.trim())
-                    .filter(line => line && line.length > 0 && /^[0-9]+$/.test(line)); // Só números
+                    .filter(line => {
+                        // CORREÇÃO: Validação mais permissiva
+                        const isValid = line && line.length >= 8 && line.length <= 20 && /^[0-9]+$/.test(line);
+                        if (line && !isValid) {
+                            console.log('⚠️ EAN inválido ignorado:', line, '(comprimento:', line.length, ')');
+                        }
+                        return isValid;
+                    });
+                
+                console.log('📄 EANs após validação:', localEANs);
             }
         } catch (parseError) {
             console.error('❌ Erro ao fazer parse:', parseError.message);
@@ -213,6 +223,17 @@ async function getAllProductsFromShopify(shopifyClient) {
         
         console.log('📊 ' + localEANs.length + ' EANs encontrados na lista local');
         
+        // CORREÇÃO: Se não há EANs válidos, terminar aqui
+        if (localEANs.length === 0) {
+            console.log('⚠️ Nenhum EAN válido encontrado na lista local');
+            return {
+                processed: 0,
+                success: 0,
+                errors: 0,
+                skipped: 0
+            };
+        }
+        
         // Processar cada EAN da lista local (SISTEMA ORIGINAL RESTAURADO)
         let processedCount = 0;
         let successCount = 0;
@@ -222,16 +243,9 @@ async function getAllProductsFromShopify(shopifyClient) {
         for (const ean of localEANs) {
             processedCount++;
             
-            // VALIDAÇÃO: Verificar se EAN é válido
-            if (!ean || typeof ean !== 'string' || !/^[0-9]+$/.test(ean)) {
-                console.log('⚠️ EAN ' + processedCount + ' inválido - ignorando:', ean);
-                skippedCount++;
-                continue;
-            }
-            
             console.log('🔍 Processando EAN ' + processedCount + '/' + localEANs.length + ': ' + ean);
             
-            // Verificar se produto já existe na Shopify
+            // CORREÇÃO: Verificar se produto já existe na Shopify (allProducts é garantidamente array)
             const existingProduct = allProducts.find(shopifyProduct => {
                 return shopifyProduct.variants && shopifyProduct.variants.some(variant => 
                     variant.sku === ean
@@ -406,4 +420,4 @@ async function createProductViaREST(restClient, product) {
 }
 
 module.exports = getAllProductsFromShopify;
-
+            
