@@ -1,87 +1,75 @@
 require('colors');
-const getProductFromSupplier = require('../supplierAPI/getProductFromSupplier');
+const axios = require('axios');
 
-// Função principal que obtém produtos da Shopify e processa a lista local de EANs
+// Função para obter produtos da Shopify via REST API
 async function getAllProductsFromShopify(shopifyClient) {
     try {
-        console.log('🛍️ Obtendo produtos da Shopify...');
+        console.log('🛍️ Obtendo produtos da Shopify via REST API...');
         
-        // Validar cliente Shopify
-        if (!shopifyClient) {
-            throw new Error('Cliente Shopify não fornecido para getAllProductsFromShopify');
+        // Extrair configurações do cliente GraphQL
+        const storeUrl = process.env.SHOPIFY_STORE_URL;
+        const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
+        
+        if (!storeUrl || !accessToken) {
+            throw new Error('Variáveis de ambiente SHOPIFY_STORE_URL ou SHOPIFY_ACCESS_TOKEN não definidas');
         }
         
-        if (typeof shopifyClient.request !== 'function') {
-            throw new Error('Cliente Shopify inválido - método request não encontrado');
+        // Extrair domain da URL
+        let storeDomain = storeUrl;
+        if (storeUrl.includes('://')) {
+            storeDomain = storeUrl.split('://')[1];
+        }
+        if (!storeDomain.includes('.myshopify.com')) {
+            storeDomain = storeDomain + '.myshopify.com';
         }
         
-        // Query GraphQL para obter produtos CORRIGIDA
-        const query = `
-            query getProducts($first: Int!, $after: String) {
-                products(first: $first, after: $after) {
-                    edges {
-                        node {
-                            id
-                            title
-                            handle
-                            variants(first: 1) {
-                                edges {
-                                    node {
-                                        sku
-                                    }
-                                }
-                            }
-                        }
-                        cursor
-                    }
-                    pageInfo {
-                        hasNextPage
-                        endCursor
-                    }
-                }
+        // Configurar cliente REST
+        const restClient = axios.create({
+            baseURL: `https://${storeDomain}/admin/api/2024-07`,
+            headers: {
+                'X-Shopify-Access-Token': accessToken,
+                'Content-Type': 'application/json'
             }
-        `;
+        });
+        
+        console.log('📊 Obtendo produtos via REST API...');
         
         let allProducts = [];
-        let hasNextPage = true;
-        let cursor = null;
+        let page = 1;
+        const limit = 50;
         
-        // Obter todos os produtos com paginação
-        while (hasNextPage) {
-            // CORREÇÃO CRÍTICA: Garantir que variables é um objeto válido
-            const variables = {
-                first: 50, // Valor fixo válido
-                after: cursor
-            };
-            
-            console.log('📊 Obtendo página de produtos...');
-            console.log('📄 Variáveis enviadas:', JSON.stringify(variables, null, 2));
-            
-            try {
-                // CORREÇÃO CRÍTICA: Passar variables diretamente, não como objeto aninhado
-                const response = await shopifyClient.request(query, variables);
+        try {
+            // Obter produtos com paginação REST
+            while (true) {
+                const response = await restClient.get('/products.json', {
+                    params: {
+                        limit: limit,
+                        page: page,
+                        fields: 'id,title,handle,variants'
+                    }
+                });
                 
-                if (!response || !response.data || !response.data.products) {
-                    console.error('❌ Resposta inválida da API Shopify');
-                    console.error('📄 Resposta:', JSON.stringify(response, null, 2));
+                if (!response.data || !response.data.products) {
+                    console.log('❌ Resposta inválida da REST API');
                     break;
                 }
                 
-                const products = response.data.products.edges.map(edge => edge.node);
+                const products = response.data.products;
                 allProducts = allProducts.concat(products);
                 
-                hasNextPage = response.data.products.pageInfo.hasNextPage;
-                cursor = response.data.products.pageInfo.endCursor;
+                console.log('📦 Produtos obtidos na página', page + ':', products.length);
                 
-                console.log('📦 Produtos obtidos nesta página:', products.length);
-                
-            } catch (queryError) {
-                console.error('❌ Erro na query de produtos:', queryError.message);
-                if (queryError.response) {
-                    console.error('📄 Detalhes:', JSON.stringify(queryError.response, null, 2));
+                // Se obteve menos que o limite, chegou ao fim
+                if (products.length < limit) {
+                    break;
                 }
-                break;
+                
+                page++;
             }
+            
+        } catch (restError) {
+            console.log('⚠️ Erro na REST API, continuando sem produtos existentes:', restError.message);
+            // Continuar mesmo sem conseguir obter produtos existentes
         }
         
         console.log('📊 Total de produtos na Shopify:', allProducts.length);
@@ -141,8 +129,8 @@ async function getAllProductsFromShopify(shopifyClient) {
             
             // Verificar se produto já existe na Shopify
             const existingProduct = allProducts.find(shopifyProduct => {
-                return shopifyProduct.variants.edges.some(variant => 
-                    variant.node.sku === ean
+                return shopifyProduct.variants && shopifyProduct.variants.some(variant => 
+                    variant.sku === ean
                 );
             });
             
@@ -157,6 +145,7 @@ async function getAllProductsFromShopify(shopifyClient) {
             
             try {
                 // SISTEMA ORIGINAL: Obter dados da API Suprides
+                const getProductFromSupplier = require('../supplierAPI/getProductFromSupplier');
                 console.log('🔍 Consultando API Suprides para EAN:', ean);
                 const productData = await getProductFromSupplier(ean);
                 
@@ -168,11 +157,8 @@ async function getAllProductsFromShopify(shopifyClient) {
                 
                 console.log('✅ Dados obtidos da Suprides:', productData.name || 'Nome não disponível');
                 
-                // Importar função de criação de produtos
-                const createProductToShopify = require('./createProductToShopify');
-                
-                // Criar produto na Shopify com dados da Suprides
-                await createProductToShopify(shopifyClient, productData);
+                // Criar produto na Shopify via REST API
+                await createProductViaREST(restClient, productData);
                 successCount++;
                 console.log('✅ Produto criado com sucesso na Shopify!');
                 
@@ -213,4 +199,89 @@ async function getAllProductsFromShopify(shopifyClient) {
     }
 }
 
+// Função para criar produto via REST API
+async function createProductViaREST(restClient, product) {
+    try {
+        console.log('🚀 Criando produto via REST API:', product.name);
+        
+        // Gerar tags automáticas
+        const tags = [];
+        if (product.brand) {
+            tags.push(product.brand);
+        }
+        tags.push('Gadgets Diversos');
+        
+        // Mapear stock
+        let inventory_quantity = 0;
+        switch(product.stock) {
+            case 'Disponível ( < 10 UN )':
+            case 'Disponível ( < 10 Un )':
+                inventory_quantity = 9;
+                break;
+            case 'Stock Reduzido ( < 2 UN )':
+            case 'Stock Reduzido ( < 2 Un )':
+                inventory_quantity = 1;
+                break;
+            default:
+                inventory_quantity = 10;
+                break;
+        }
+        
+        // Preparar dados do produto para REST API
+        const productData = {
+            product: {
+                title: product.name,
+                body_html: (product.short_description || '') + "\\n\\n" + (product.description || ''),
+                vendor: product.brand || '',
+                product_type: product.family || '',
+                tags: tags.join(', '),
+                status: 'active',
+                variants: [
+                    {
+                        price: product.price || product.pvpr || '0.00',
+                        sku: product.ean,
+                        inventory_management: 'shopify',
+                        inventory_policy: 'deny',
+                        inventory_quantity: inventory_quantity
+                    }
+                ]
+            }
+        };
+        
+        // Adicionar imagens se existirem
+        if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+            productData.product.images = product.images.map((img, index) => ({
+                src: img,
+                alt: `${product.name} - Imagem ${index + 1}`
+            }));
+        }
+        
+        console.log('📤 Enviando produto via REST API...');
+        console.log('   • Título:', productData.product.title);
+        console.log('   • Preço:', productData.product.variants[0].price);
+        console.log('   • SKU:', productData.product.variants[0].sku);
+        console.log('   • Stock:', productData.product.variants[0].inventory_quantity);
+        console.log('   • Imagens:', productData.product.images ? productData.product.images.length : 0);
+        
+        const response = await restClient.post('/products.json', productData);
+        
+        if (response.data && response.data.product) {
+            console.log('✅ Produto criado com sucesso via REST API!');
+            console.log('   • ID:', response.data.product.id);
+            console.log('   • Handle:', response.data.product.handle);
+            return response.data.product;
+        } else {
+            throw new Error('Resposta inválida da REST API');
+        }
+        
+    } catch (error) {
+        console.log('❌ Erro na criação via REST API:', error.message);
+        if (error.response && error.response.data) {
+            console.log('📄 Detalhes do erro:', JSON.stringify(error.response.data, null, 2));
+        }
+        throw error;
+    }
+}
+
 module.exports = getAllProductsFromShopify;
+                    
