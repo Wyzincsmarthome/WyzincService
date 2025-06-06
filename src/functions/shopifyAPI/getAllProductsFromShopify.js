@@ -1,7 +1,7 @@
 require('colors');
-const createProductToShopify = require('./createProductToShopify');
+const getProductFromSupplier = require('../supplierAPI/getProductFromSupplier');
 
-// Função principal que obtém produtos da Shopify e processa a lista local
+// Função principal que obtém produtos da Shopify e processa a lista local de EANs
 async function getAllProductsFromShopify(shopifyClient) {
     try {
         console.log('🛍️ Obtendo produtos da Shopify...');
@@ -15,7 +15,7 @@ async function getAllProductsFromShopify(shopifyClient) {
             throw new Error('Cliente Shopify inválido - método request não encontrado');
         }
         
-        // Query GraphQL para obter produtos CORRIGIDA
+        // Query GraphQL para obter produtos
         const query = `
             query getProducts($first: Int!, $after: String) {
                 products(first: $first, after: $after) {
@@ -48,14 +48,12 @@ async function getAllProductsFromShopify(shopifyClient) {
         
         // Obter todos os produtos com paginação
         while (hasNextPage) {
-            // CORREÇÃO CRÍTICA: Garantir que first tem valor válido
             const variables = {
-                first: 50, // Valor fixo válido
+                first: 50,
                 after: cursor
             };
             
             console.log('📊 Obtendo página de produtos...');
-            console.log('📄 Variáveis:', JSON.stringify(variables, null, 2));
             
             try {
                 const response = await shopifyClient.request(query, variables);
@@ -85,105 +83,109 @@ async function getAllProductsFromShopify(shopifyClient) {
         
         console.log('📊 Total de produtos na Shopify:', allProducts.length);
         
-        // Ler lista de produtos local
+        // Ler lista de EANs local (SISTEMA ORIGINAL)
         const fs = require('fs');
         const path = require('path');
         
         const productsListPath = path.join(__dirname, '../../productsList.txt');
         
-        console.log('📄 Procurando ficheiro em:', productsListPath);
+        console.log('📄 Procurando lista de EANs em:', productsListPath);
         
         if (!fs.existsSync(productsListPath)) {
             console.error('❌ Ficheiro productsList.txt não encontrado em:', productsListPath);
-            
-            // Listar ficheiros no diretório para debugging
-            const dirPath = path.dirname(productsListPath);
-            console.log('📁 Ficheiros no diretório:', fs.readdirSync(dirPath));
-            
             throw new Error('Ficheiro productsList.txt não encontrado em: ' + productsListPath);
         }
         
         const productsListContent = fs.readFileSync(productsListPath, 'utf8');
-        console.log('📄 Lendo lista de produtos...');
+        console.log('📄 Lendo lista de EANs...');
         console.log('📄 Conteúdo (primeiros 200 chars):', productsListContent.substring(0, 200));
         
-        let localProducts;
+        let localEANs;
         try {
-            localProducts = JSON.parse(productsListContent);
+            localEANs = JSON.parse(productsListContent);
         } catch (parseError) {
             console.error('❌ Erro ao fazer parse do JSON:', parseError.message);
             console.error('📄 Conteúdo completo:', productsListContent);
             throw new Error('Erro ao fazer parse do productsList.txt: ' + parseError.message);
         }
         
-        if (!Array.isArray(localProducts)) {
+        if (!Array.isArray(localEANs)) {
             console.error('❌ Conteúdo não é um array');
-            console.error('📄 Tipo:', typeof localProducts);
-            console.error('📄 Conteúdo:', localProducts);
-            throw new Error('productsList.txt não contém um array válido');
+            console.error('📄 Tipo:', typeof localEANs);
+            console.error('📄 Conteúdo:', localEANs);
+            throw new Error('productsList.txt não contém um array válido de EANs');
         }
         
-        console.log('📊 ' + localProducts.length + ' produtos encontrados na lista local');
+        console.log('📊 ' + localEANs.length + ' EANs encontrados na lista local');
         
-        // Processar cada produto da lista local
+        // Processar cada EAN da lista local (SISTEMA ORIGINAL RESTAURADO)
         let processedCount = 0;
         let successCount = 0;
         let errorCount = 0;
         let skippedCount = 0;
         
-        for (const localProduct of localProducts) {
+        for (const ean of localEANs) {
             processedCount++;
             
-            // VALIDAÇÃO CRÍTICA: Verificar se localProduct existe e tem estrutura válida
-            if (!localProduct) {
-                console.log('⚠️ Produto ' + processedCount + ' é null/undefined - ignorando');
+            // VALIDAÇÃO: Verificar se EAN é válido
+            if (!ean || typeof ean !== 'string') {
+                console.log('⚠️ EAN ' + processedCount + ' inválido - ignorando:', ean);
                 skippedCount++;
                 continue;
             }
             
-            if (typeof localProduct !== 'object') {
-                console.log('⚠️ Produto ' + processedCount + ' não é um objeto válido - ignorando');
-                skippedCount++;
-                continue;
-            }
-            
-            if (!localProduct.ean) {
-                console.log('⚠️ Produto ' + processedCount + ' não tem EAN - ignorando');
-                skippedCount++;
-                continue;
-            }
-            
-            console.log('🔍 Processando produto ' + processedCount + '/' + localProducts.length + ': ' + (localProduct.name || 'Nome não definido'));
+            console.log('🔍 Processando EAN ' + processedCount + '/' + localEANs.length + ': ' + ean);
             
             // Verificar se produto já existe na Shopify
             const existingProduct = allProducts.find(shopifyProduct => {
                 return shopifyProduct.variants.edges.some(variant => 
-                    variant.node.sku === localProduct.ean
+                    variant.node.sku === ean
                 );
             });
             
             if (existingProduct) {
-                console.log('✅ Produto já existe na Shopify (SKU: ' + localProduct.ean + ') - ignorando');
+                console.log('✅ Produto já existe na Shopify (SKU: ' + ean + ') - ignorando');
                 skippedCount++;
                 continue;
             }
             
-            // Produto não existe - criar
-            console.log('🆕 Produto não existe na Shopify - criando...');
+            // Produto não existe - obter dados da API Suprides
+            console.log('🆕 Produto não existe na Shopify - obtendo dados da Suprides...');
             
             try {
-                // CORREÇÃO CRÍTICA: Usar função importada e passar localProduct validado
-                await createProductToShopify(shopifyClient, localProduct);
+                // SISTEMA ORIGINAL: Obter dados da API Suprides
+                console.log('🔍 Consultando API Suprides para EAN:', ean);
+                const productData = await getProductFromSupplier(ean);
+                
+                if (!productData) {
+                    console.log('❌ Produto não encontrado na API Suprides para EAN:', ean);
+                    errorCount++;
+                    continue;
+                }
+                
+                console.log('✅ Dados obtidos da Suprides:', productData.name || 'Nome não disponível');
+                
+                // Importar função de criação de produtos
+                const createProductToShopify = require('./createProductToShopify');
+                
+                // Criar produto na Shopify com dados da Suprides
+                await createProductToShopify(shopifyClient, productData);
                 successCount++;
-                console.log('✅ Produto criado com sucesso!');
+                console.log('✅ Produto criado com sucesso na Shopify!');
                 
                 // Delay entre criações para evitar rate limiting
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 
             } catch (createError) {
                 errorCount++;
-                console.log('❌ Erro ao criar produto:', createError.message);
-                // Continuar com próximo produto
+                console.log('❌ Erro ao processar EAN ' + ean + ':', createError.message);
+                
+                // Log detalhado do erro
+                if (createError.message.includes('API do fornecedor')) {
+                    console.log('💡 Sugestão: Verificar credenciais da API Suprides (API_USER, API_PASSWORD, API_TOKEN)');
+                }
+                
+                // Continuar com próximo EAN
             }
         }
         
