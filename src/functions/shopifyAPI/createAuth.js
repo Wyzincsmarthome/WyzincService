@@ -4,16 +4,25 @@ async function createAuth() {
     try {
         console.log('🔐 Configurando autenticação Shopify...');
         
-        // Validar variáveis de ambiente
-        const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
+        // CORREÇÃO: Usar SHOPIFY_STORE_URL (como está no workflow) e extrair domain
+        const storeUrl = process.env.SHOPIFY_STORE_URL;
         const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
         
-        if (!storeDomain) {
-            throw new Error('SHOPIFY_STORE_DOMAIN não está definido nas variáveis de ambiente');
+        if (!storeUrl) {
+            throw new Error('SHOPIFY_STORE_URL não está definido nas variáveis de ambiente');
         }
         
         if (!accessToken) {
             throw new Error('SHOPIFY_ACCESS_TOKEN não está definido nas variáveis de ambiente');
+        }
+        
+        // Extrair domain da URL (remover https:// e .myshopify.com se necessário)
+        let storeDomain = storeUrl;
+        if (storeUrl.includes('://')) {
+            storeDomain = storeUrl.split('://')[1];
+        }
+        if (!storeDomain.includes('.myshopify.com')) {
+            storeDomain = storeDomain + '.myshopify.com';
         }
         
         console.log('🏪 Store Domain:', storeDomain.replace(/./g, '*'));
