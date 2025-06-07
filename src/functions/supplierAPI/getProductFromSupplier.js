@@ -17,13 +17,13 @@ async function getProductFromSupplier(ean) {
         console.log('   API_PASSWORD:', apiPassword ? 'Definido' : 'Nao definido');
         console.log('   API_TOKEN:', apiToken ? 'Definido' : 'Nao definido');
         
-        // Baseado nos logs, a Tentativa 3 funcionou mas faltou o campo 'user'
-        // Vou usar Bearer token nos headers + user nos parâmetros
+        // A API precisa de user E password nos parâmetros + Bearer token nos headers
         try {
-            console.log('Tentativa: Bearer token + user nos parametros');
+            console.log('Tentativa: Bearer token + user + password nos parametros');
             const response = await axios.get('https://www.suprides.pt/rest/V1/integration/products-list', {
                 params: {
                     user: apiUser,
+                    password: apiPassword,
                     searchCriteria: JSON.stringify({
                         filterGroups: [{
                             filters: [{
@@ -56,6 +56,14 @@ async function getProductFromSupplier(ean) {
                 // Se chegou aqui, o produto foi encontrado
                 console.log('Produto encontrado na API:', rawProduct.name || rawProduct.title || 'Nome nao disponivel');
                 console.log('Estrutura do produto:', Object.keys(rawProduct));
+                console.log('Dados do produto:');
+                console.log('   Nome:', rawProduct.name);
+                console.log('   Titulo:', rawProduct.title);
+                console.log('   Preco:', rawProduct.price);
+                console.log('   PVP:', rawProduct.pvpr);
+                console.log('   Marca:', rawProduct.brand);
+                console.log('   Stock:', rawProduct.stock);
+                console.log('   Descricao:', rawProduct.description);
                 
                 return rawProduct;
             } else if (response.status === 200 && Array.isArray(response.data) && response.data.length === 0) {
