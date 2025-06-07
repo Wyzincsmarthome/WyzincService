@@ -12,10 +12,17 @@ async function getProductFromSupplier(ean) {
             throw new Error('Credenciais da API Suprides nao configuradas');
         }
         
-        // Método 1: Apenas Bearer Token
+        console.log('Credenciais configuradas:');
+        console.log('   API_USER:', apiUser);
+        console.log('   API_PASSWORD:', apiPassword ? 'Definido' : 'Nao definido');
+        console.log('   API_TOKEN:', apiToken ? 'Definido' : 'Nao definido');
+        
+        // Método 1: Bearer Token com campo user
         try {
+            console.log('Tentativa 1: Bearer Token com campo user');
             const response1 = await axios.get('https://www.suprides.pt/rest/V1/integration/products-list', {
                 params: {
+                    user: apiUser,
                     searchCriteria: JSON.stringify({
                         filterGroups: [{
                             filters: [{
@@ -33,40 +40,65 @@ async function getProductFromSupplier(ean) {
                 timeout: 15000
             });
             
+            console.log('Tentativa 1 - Status:', response1.status);
+            console.log('Tentativa 1 - Resposta:', JSON.stringify(response1.data, null, 2));
+            
             if (response1.status === 200 && Array.isArray(response1.data) && response1.data.length > 0) {
-                const rawProduct = response1.data[0];
-                console.log('Produto RAW recebido da API:', JSON.stringify(rawProduct, null, 2));
-                
-                // Mapear campos corretamente baseado na estrutura real da API
-                const product = {
-                    ean: ean,
-                    name: rawProduct.name || rawProduct.title || rawProduct.product_name || 'Produto sem nome',
-                    description: rawProduct.description || rawProduct.short_description || '',
-                    short_description: rawProduct.short_description || rawProduct.description || '',
-                    price: rawProduct.price || rawProduct.cost || rawProduct.wholesale_price || 0,
-                    pvpr: rawProduct.pvpr || rawProduct.retail_price || rawProduct.price || 0,
-                    brand: rawProduct.brand || rawProduct.manufacturer || rawProduct.vendor || '',
-                    family: rawProduct.family || rawProduct.category || rawProduct.product_type || '',
-                    stock: rawProduct.stock || rawProduct.quantity || rawProduct.inventory || 'Disponível',
-                    images: rawProduct.images || rawProduct.image_urls || []
-                };
-                
-                console.log('Produto MAPEADO:');
-                console.log('   Nome:', product.name);
-                console.log('   Preço:', product.price);
-                console.log('   PVP:', product.pvpr);
-                console.log('   Marca:', product.brand);
-                console.log('   Stock:', product.stock);
-                
+                const product = response1.data[0];
+                console.log('Produto encontrado na API (Tentativa 1):', product.name || 'Nome nao disponivel');
                 return product;
             }
         } catch (error1) {
             console.log('Tentativa 1 falhou:', error1.message);
+            if (error1.response) {
+                console.log('   Status:', error1.response.status);
+                console.log('   Dados:', JSON.stringify(error1.response.data, null, 2));
+            }
         }
         
-        // Método 2: Endpoint alternativo
+        // Método 2: POST com dados no body
         try {
-            const response2 = await axios.get('https://www.suprides.pt/rest/all/V1/integration/products-list', {
+            console.log('Tentativa 2: POST com dados no body');
+            const response2 = await axios.post('https://www.suprides.pt/rest/V1/integration/products-list', {
+                user: apiUser,
+                password: apiPassword,
+                token: apiToken,
+                searchCriteria: {
+                    filterGroups: [{
+                        filters: [{
+                            field: 'ean',
+                            value: ean,
+                            conditionType: 'eq'
+                        }]
+                    }]
+                }
+            }, {
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15000
+            });
+            
+            console.log('Tentativa 2 - Status:', response2.status);
+            console.log('Tentativa 2 - Resposta:', JSON.stringify(response2.data, null, 2));
+            
+            if (response2.status === 200 && Array.isArray(response2.data) && response2.data.length > 0) {
+                const product = response2.data[0];
+                console.log('Produto encontrado na API (Tentativa 2):', product.name || 'Nome nao disponivel');
+                return product;
+            }
+        } catch (error2) {
+            console.log('Tentativa 2 falhou:', error2.message);
+            if (error2.response) {
+                console.log('   Status:', error2.response.status);
+                console.log('   Dados:', JSON.stringify(error2.response.data, null, 2));
+            }
+        }
+        
+        // Método 3: GET com user nos headers
+        try {
+            console.log('Tentativa 3: GET com user nos headers');
+            const response3 = await axios.get('https://www.suprides.pt/rest/V1/integration/products-list', {
                 params: {
                     searchCriteria: JSON.stringify({
                         filterGroups: [{
@@ -80,46 +112,35 @@ async function getProductFromSupplier(ean) {
                 },
                 headers: {
                     'Authorization': 'Bearer ' + apiToken,
+                    'X-User': apiUser,
+                    'X-Password': apiPassword,
                     'Content-Type': 'application/json'
                 },
                 timeout: 15000
             });
             
-            if (response2.status === 200 && Array.isArray(response2.data) && response2.data.length > 0) {
-                const rawProduct = response2.data[0];
-                console.log('Produto RAW recebido da API (endpoint alternativo):', JSON.stringify(rawProduct, null, 2));
-                
-                // Mapear campos corretamente
-                const product = {
-                    ean: ean,
-                    name: rawProduct.name || rawProduct.title || rawProduct.product_name || 'Produto sem nome',
-                    description: rawProduct.description || rawProduct.short_description || '',
-                    short_description: rawProduct.short_description || rawProduct.description || '',
-                    price: rawProduct.price || rawProduct.cost || rawProduct.wholesale_price || 0,
-                    pvpr: rawProduct.pvpr || rawProduct.retail_price || rawProduct.price || 0,
-                    brand: rawProduct.brand || rawProduct.manufacturer || rawProduct.vendor || '',
-                    family: rawProduct.family || rawProduct.category || rawProduct.product_type || '',
-                    stock: rawProduct.stock || rawProduct.quantity || rawProduct.inventory || 'Disponível',
-                    images: rawProduct.images || rawProduct.image_urls || []
-                };
-                
-                console.log('Produto MAPEADO (endpoint alternativo):');
-                console.log('   Nome:', product.name);
-                console.log('   Preço:', product.price);
-                console.log('   PVP:', product.pvpr);
-                console.log('   Marca:', product.brand);
-                console.log('   Stock:', product.stock);
-                
+            console.log('Tentativa 3 - Status:', response3.status);
+            console.log('Tentativa 3 - Resposta:', JSON.stringify(response3.data, null, 2));
+            
+            if (response3.status === 200 && Array.isArray(response3.data) && response3.data.length > 0) {
+                const product = response3.data[0];
+                console.log('Produto encontrado na API (Tentativa 3):', product.name || 'Nome nao disponivel');
                 return product;
             }
-        } catch (error2) {
-            console.log('Tentativa 2 falhou:', error2.message);
+        } catch (error3) {
+            console.log('Tentativa 3 falhou:', error3.message);
+            if (error3.response) {
+                console.log('   Status:', error3.response.status);
+                console.log('   Dados:', JSON.stringify(error3.response.data, null, 2));
+            }
         }
         
-        // Método 3: Apenas Basic Auth
+        // Método 4: Basic Auth com user no query
         try {
-            const response3 = await axios.get('https://www.suprides.pt/rest/V1/integration/products-list', {
+            console.log('Tentativa 4: Basic Auth com user no query');
+            const response4 = await axios.get('https://www.suprides.pt/rest/V1/integration/products-list', {
                 params: {
+                    user: apiUser,
                     searchCriteria: JSON.stringify({
                         filterGroups: [{
                             filters: [{
@@ -140,42 +161,31 @@ async function getProductFromSupplier(ean) {
                 timeout: 15000
             });
             
-            if (response3.status === 200 && Array.isArray(response3.data) && response3.data.length > 0) {
-                const rawProduct = response3.data[0];
-                console.log('Produto RAW recebido da API (basic auth):', JSON.stringify(rawProduct, null, 2));
-                
-                // Mapear campos corretamente
-                const product = {
-                    ean: ean,
-                    name: rawProduct.name || rawProduct.title || rawProduct.product_name || 'Produto sem nome',
-                    description: rawProduct.description || rawProduct.short_description || '',
-                    short_description: rawProduct.short_description || rawProduct.description || '',
-                    price: rawProduct.price || rawProduct.cost || rawProduct.wholesale_price || 0,
-                    pvpr: rawProduct.pvpr || rawProduct.retail_price || rawProduct.price || 0,
-                    brand: rawProduct.brand || rawProduct.manufacturer || rawProduct.vendor || '',
-                    family: rawProduct.family || rawProduct.category || rawProduct.product_type || '',
-                    stock: rawProduct.stock || rawProduct.quantity || rawProduct.inventory || 'Disponível',
-                    images: rawProduct.images || rawProduct.image_urls || []
-                };
-                
-                console.log('Produto MAPEADO (basic auth):');
-                console.log('   Nome:', product.name);
-                console.log('   Preço:', product.price);
-                console.log('   PVP:', product.pvpr);
-                console.log('   Marca:', product.brand);
-                console.log('   Stock:', product.stock);
-                
+            console.log('Tentativa 4 - Status:', response4.status);
+            console.log('Tentativa 4 - Resposta:', JSON.stringify(response4.data, null, 2));
+            
+            if (response4.status === 200 && Array.isArray(response4.data) && response4.data.length > 0) {
+                const product = response4.data[0];
+                console.log('Produto encontrado na API (Tentativa 4):', product.name || 'Nome nao disponivel');
                 return product;
             }
-        } catch (error3) {
-            console.log('Tentativa 3 falhou:', error3.message);
+        } catch (error4) {
+            console.log('Tentativa 4 falhou:', error4.message);
+            if (error4.response) {
+                console.log('   Status:', error4.response.status);
+                console.log('   Dados:', JSON.stringify(error4.response.data, null, 2));
+            }
         }
         
-        console.log('Produto nao encontrado na API Suprides para EAN:', ean);
+        console.log('Todas as tentativas falharam - produto nao encontrado na API Suprides para EAN:', ean);
         return null;
         
     } catch (error) {
         console.log('Erro geral ao consultar API Suprides:', error.message);
+        if (error.response) {
+            console.log('Status:', error.response.status);
+            console.log('Dados:', JSON.stringify(error.response.data, null, 2));
+        }
         return null;
     }
 }
