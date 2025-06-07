@@ -1,9 +1,8 @@
-//Versão com autenticação corrigida para API Suprides
-require('colors');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
+// Função para gerar tags de produto
 function generateProductTags(product) {
     const tags = [];
     
@@ -12,199 +11,74 @@ function generateProductTags(product) {
         return [];
     }
     
-    // ===== REGRA ESPECÍFICA PETKIT =====
-    // Todos os produtos PetKit são automaticamente "Gadgets P/ Animais"
-    if (product.brand && product.brand.toLowerCase() === 'petkit') {
-        console.log('Produto PetKit detectado - aplicando tag especifica: Gadgets P/ Animais');
-        tags.push('PetKit');
-        tags.push('Gadgets P/ Animais');
-        console.log('Tags geradas para produto PetKit', product.name || 'produto sem nome', ':', tags);
-        return tags;
-    }
-    
-    // ===== PROCESSAMENTO DA MARCA =====
+    // TAG DE MARCA
     let brandTag = '';
     if (product.brand) {
-        // Mapeamento de marcas para garantir consistência
-        const brandMap = {
-            'xiaomi': 'Xiaomi',
-            'baseus': 'Baseus',
-            'torras': 'Torras',
-            'apple': 'Apple',
-            'hutt': 'Hutt',
-            'petkit': 'PetKit',
-            'kingston': 'Kingston',
-            'anker': 'Anker',
-            'ugreen': 'Ugreen',
-            'samsung': 'Samsung',
-            'lg': 'LG',
-            'sony': 'Sony',
-            'philips': 'Philips',
-            'tp-link': 'TP-Link',
-            'aqara': 'Aqara',
-            'eufy': 'Eufy',
-            'roborock': 'Roborock'
-        };
-        
-        // Caso especial: Xiaomi Yeelight é marcado como Yeelight
-        if (product.brand.toLowerCase() === 'xiaomi' && 
-            product.name && 
-            product.name.toLowerCase().includes('yeelight')) {
+        if (product.brand.toLowerCase() === 'xiaomi' && product.name && product.name.toLowerCase().includes('yeelight')) {
             brandTag = 'Yeelight';
         } else {
-            // Usar mapeamento ou a marca original com primeira letra maiúscula
-            brandTag = brandMap[product.brand.toLowerCase()] || 
-                       product.brand.charAt(0).toUpperCase() + product.brand.slice(1).toLowerCase();
+            const brandMap = {
+                'xiaomi': 'Xiaomi',
+                'baseus': 'Baseus',
+                'torras': 'Torras',
+                'apple': 'Apple',
+                'hutt': 'Hutt',
+                'petkit': 'Petkit',
+                'kingston': 'Kingston'
+            };
+            brandTag = brandMap[product.brand.toLowerCase()] || product.brand;
         }
-        
         if (brandTag) tags.push(brandTag);
     }
     
-    // ===== DETERMINAÇÃO DA CATEGORIA =====
-    // Extrair informações do produto para análise
+    // TAG DE CATEGORIA
+    let categoryTag = '';
     const productName = (product.name || '').toLowerCase();
     const productDescription = (product.description || '').toLowerCase();
     const productFamily = (product.family || '').toLowerCase();
-    const productLine = (product.product_line || '').toLowerCase();
-    const subFamily = (product.sub_family || '').toLowerCase();
     
-    // Criar chave de categoria para mapeamento
-    const categoryKey = `${product.product_line || 'N/A'} > ${product.family || 'N/A'} > ${product.sub_family || 'N/A'}`;
-    console.log('Categoria Suprides:', categoryKey);
-    
-    // Mapeamento completo de categorias Suprides para tags Shopify
-    const categoryMapping = {
-        // Aspiradores
-        "Smart Home E Peq. Domésticos > Aspiração > Robot": "Aspirador Robo",
-        "Smart Home E Peq. Domésticos > Aspiração > Vertical": "Aspirador Vertical",
-        "Smart Home E Peq. Domésticos > Aspiração > N/A": "Aspiradores",
-        
-        // TVs
-        "TV > TVs > Smart TV": "TVs",
-        "TV > TVs > QLED": "TVs",
-        "TV > TVs > OLED": "TVs",
-        "TV > TVs > N/A": "TVs",
-        
-        // Domótica
-        "Smart Home E Peq. Domésticos > Domótica > Sensor": "Sensores Inteligentes",
-        "Smart Home E Peq. Domésticos > Domótica > Tomada": "Tomadas",
-        "Smart Home E Peq. Domésticos > Domótica > Interruptor": "Interruptor Inteligente",
-        "Smart Home E Peq. Domésticos > Domótica > Fechadura": "Fechaduras Inteligentes",
-        "Smart Home E Peq. Domésticos > Domótica > Campainha": "Campainha Inteligente",
-        "Smart Home E Peq. Domésticos > Domótica > Hub": "Hubs Inteligentes",
-        "Smart Home E Peq. Domésticos > Domótica > N/A": "Gadgets Inteligentes",
-        
-        // Iluminação
-        "Smart Home E Peq. Domésticos > Iluminação > Lâmpada": "Iluminacao",
-        "Smart Home E Peq. Domésticos > Iluminação > Fita LED": "Iluminacao",
-        "Smart Home E Peq. Domésticos > Iluminação > N/A": "Iluminacao",
-        
-        // Câmaras
-        "Smart Home E Peq. Domésticos > Vigilância > Câmara": "Camaras",
-        "Smart Home E Peq. Domésticos > Vigilância > N/A": "Camaras",
-        
-        // Audio
-        "Audio > Auscultadores > Bluetooth": "Audio",
-        "Audio > Auscultadores > N/A": "Audio",
-        "Audio > Colunas > Bluetooth": "Audio",
-        "Audio > Colunas > N/A": "Audio",
-        "Audio > N/A > N/A": "Audio",
-        
-        // Smartphones e Tablets
-        "Smartphones > Xiaomi > Redmi": "Smartphones",
-        "Smartphones > Xiaomi > N/A": "Smartphones",
-        "Smartphones > N/A > N/A": "Smartphones",
-        "Tablets > Xiaomi > Pad": "Tablets",
-        "Tablets > Xiaomi > N/A": "Tablets",
-        "Tablets > N/A > N/A": "Tablets",
-        
-        // Smartwatches
-        "Wearables > Smartwatch > Xiaomi": "Smartwatches",
-        "Wearables > Smartwatch > N/A": "Smartwatches",
-        "Wearables > N/A > N/A": "Smartwatches",
-        
-        // Carregadores e Cabos
-        "Acessórios > Carregadores > USB": "Carregadores e Cabos",
-        "Acessórios > Carregadores > N/A": "Carregadores e Cabos",
-        "Acessórios > Cabos > USB-C": "Carregadores e Cabos",
-        "Acessórios > Cabos > N/A": "Carregadores e Cabos",
-        
-        // Powerbanks
-        "Acessórios > Powerbank > Xiaomi": "Powerbanks",
-        "Acessórios > Powerbank > N/A": "Powerbanks",
-        
-        // Pet
-        "Pet > Gadgets > Alimentação": "Gadgets P/ Animais",
-        "Pet > Gadgets > Higiene": "Gadgets P/ Animais",
-        "Pet > Gadgets > N/A": "Gadgets P/ Animais",
-        "Pet > N/A > N/A": "Gadgets P/ Animais"
-    };
-    
-    // Verificar se a categoria existe no mapeamento
-    let categoryTag = categoryMapping[categoryKey];
-    
-    // Se não encontrou no mapeamento, usar análise de texto
-    if (!categoryTag) {
-        console.log('Categoria não encontrada no mapeamento, usando análise de texto');
-        
-        // Análise detalhada por palavras-chave no nome e descrição
-        if (productName.includes('aspirador robo') || productName.includes('robot vacuum') || productName.includes('mi robot')) {
-            categoryTag = 'Aspirador Robo';
-        } else if (productName.includes('aspirador vertical') || productDescription.includes('aspirador vertical')) {
-            categoryTag = 'Aspirador Vertical';
-        } else if (productName.includes('mini aspirador')) {
-            categoryTag = 'Mini Aspirador';
-        } else if (productName.includes('aspirador') || productFamily.includes('aspiracao')) {
-            categoryTag = 'Aspiradores';
-        } else if (productName.includes('smart tv') || productName.includes('televisao') || productFamily.includes('tvs') || 
-                   productName.includes(' tv ') || productName.includes('qled') || productName.includes('oled')) {
-            categoryTag = 'TVs';
-        } else if (productName.includes('camara') || productName.includes('camera') || productName.includes('webcam')) {
-            categoryTag = 'Camaras';
-        } else if (productName.includes('sensor')) {
-            categoryTag = 'Sensores Inteligentes';
-        } else if (productName.includes('fechadura') || productName.includes('lock')) {
-            categoryTag = 'Fechaduras Inteligentes';
-        } else if (productName.includes('tomada') || productName.includes('socket') || productName.includes('plug')) {
-            categoryTag = 'Tomadas';
-        } else if (productName.includes('controlo remoto') || productName.includes('comando') || productName.includes('remote')) {
-            categoryTag = 'Controlo Remoto';
-        } else if (productName.includes('iluminacao') || productName.includes('luz') || productName.includes('lamp') || 
-                   productName.includes('light')) {
-            categoryTag = 'Iluminacao';
-        } else if (productName.includes('cortina') || productName.includes('curtain')) {
-            categoryTag = 'Motor Cortinas';
-        } else if (productName.includes('campainha') || productName.includes('doorbell')) {
-            categoryTag = 'Campainha Inteligente';
-        } else if (productName.includes('interruptor') || productName.includes('switch')) {
-            categoryTag = 'Interruptor Inteligente';
-        } else if (productName.includes('hub') || productName.includes('gateway')) {
-            categoryTag = 'Hubs Inteligentes';
-        } else if (productName.includes('assistente virtual') || productName.includes('alexa') || 
-                   productName.includes('google assistant')) {
-            categoryTag = 'Assistentes Virtuais';
-        } else if (productName.includes('painel')) {
-            categoryTag = 'Painel Controlo';
-        } else if (productName.includes('acessorio') && productName.includes('aspirador')) {
-            categoryTag = 'Acessorios Aspiradores';
-        } else if (productName.includes('carregador') || productName.includes('charger') || productName.includes('cabo')) {
-            categoryTag = 'Carregadores e Cabos';
-        } else if (productName.includes('powerbank') || productName.includes('bateria externa')) {
-            categoryTag = 'Powerbanks';
-        } else if (productName.includes('auricular') || productName.includes('headphone') || productName.includes('earphone')) {
-            categoryTag = 'Audio';
-        } else if (productName.includes('smartphone') || productName.includes('telemovel')) {
-            categoryTag = 'Smartphones';
-        } else if (productName.includes('tablet')) {
-            categoryTag = 'Tablets';
-        } else if (productName.includes('smartwatch') || productName.includes('relogio')) {
-            categoryTag = 'Smartwatches';
-        } else if (productName.includes('inteligente') || productName.includes('smart')) {
-            categoryTag = 'Gadgets Inteligentes';
-        } else if (productLine.includes('pet') || productName.includes('animal') || productName.includes('pet')) {
+    if (productName.includes('aspirador robo') || productName.includes('robot vacuum') || productName.includes('mi robot')) {
+        categoryTag = 'Aspirador Robo';
+    } else if (productName.includes('aspirador vertical') || productDescription.includes('aspirador vertical') || productDescription.includes('tipo aspirador vertical')) {
+        categoryTag = 'Aspirador Vertical';
+    } else if (productName.includes('mini aspirador')) {
+        categoryTag = 'Mini Aspirador';
+    } else if (productName.includes('aspirador') || productFamily.includes('aspiracao')) {
+        categoryTag = 'Aspiradores';
+    } else if (productName.includes('smart tv') || productName.includes('televisao') || productFamily.includes('tvs') || productName.includes(' tv ') || productName.includes('qled') || productName.includes('oled')) {
+        categoryTag = 'TVs';
+    } else if (productName.includes('camara') || productName.includes('camera') || productName.includes('webcam')) {
+        categoryTag = 'Camaras';
+    } else if (productName.includes('sensor')) {
+        categoryTag = 'Sensores Inteligentes';
+    } else if (productName.includes('fechadura') || productName.includes('lock')) {
+        categoryTag = 'Fechaduras Inteligentes';
+    } else if (productName.includes('tomada') || productName.includes('socket') || productName.includes('plug')) {
+        categoryTag = 'Tomadas';
+    } else if (productName.includes('controlo remoto') || productName.includes('comando') || productName.includes('remote')) {
+        categoryTag = 'Controlo Remoto';
+    } else if (productName.includes('iluminacao') || productName.includes('luz') || productName.includes('lamp') || productName.includes('light')) {
+        categoryTag = 'Iluminacao';
+    } else if (productName.includes('cortina') || productName.includes('curtain')) {
+        categoryTag = 'Motor Cortinas';
+    } else if (productName.includes('campainha') || productName.includes('doorbell')) {
+        categoryTag = 'Campainha Inteligente';
+    } else if (productName.includes('interruptor') || productName.includes('switch')) {
+        categoryTag = 'Interruptor Inteligente';
+    } else if (productName.includes('hub') || productName.includes('gateway')) {
+        categoryTag = 'Hubs Inteligentes';
+    } else if (productName.includes('assistente virtual') || productName.includes('alexa') || productName.includes('google assistant')) {
+        categoryTag = 'Assistentes Virtuais';
+    } else if (productName.includes('painel')) {
+        categoryTag = 'Painel Controlo';
+    } else if (productName.includes('acessorio') && productName.includes('aspirador')) {
+        categoryTag = 'Acessorios Aspiradores';
+    } else if (productName.includes('inteligente') || productName.includes('smart')) {
+        categoryTag = 'Gadgets Inteligentes';
+    } else {
+        if (product.brand && product.brand.toLowerCase() === 'petkit') {
             categoryTag = 'Gadgets P/ Animais';
         } else {
-            // Categoria padrão para produtos não classificados
             categoryTag = 'Gadgets Diversos';
         }
     }
@@ -215,6 +89,7 @@ function generateProductTags(product) {
     return tags;
 }
 
+// Função para processar preços
 function processProductPrices(product) {
     console.log('Processando precos...');
     console.log('   Preco original (price):', product.price);
@@ -223,6 +98,7 @@ function processProductPrices(product) {
     let costPrice = 0;
     let retailPrice = 0;
     
+    // Processar preco de custo
     if (product.price) {
         const priceStr = String(product.price);
         console.log('   Processando price string:', JSON.stringify(priceStr));
@@ -239,6 +115,7 @@ function processProductPrices(product) {
         console.log('   Preco de custo final:', costPrice);
     }
     
+    // Processar PVP
     if (product.pvpr) {
         const pvprStr = String(product.pvpr);
         console.log('   Processando pvpr string:', JSON.stringify(pvprStr));
@@ -257,6 +134,7 @@ function processProductPrices(product) {
         retailPrice = costPrice;
     }
     
+    // Validacao final
     if (costPrice <= 0) {
         console.log('Preco de custo invalido, usando 1 euro');
         costPrice = 1;
@@ -273,20 +151,22 @@ function processProductPrices(product) {
     return { costPrice, retailPrice };
 }
 
+// Função para processar stock
 function processStock(stockString) {
     console.log('Processando stock:', stockString);
     
     if (!stockString) {
-        console.log('   Stock nao definido, definindo como 0');
+        console.log('   Stock não definido, definindo como 0');
         return 0;
     }
     
     const stockLower = stockString.toLowerCase();
     
+    // Verificar se está sem stock
     if (
         stockLower.includes('sem stock') || 
         stockLower.includes('indisponivel') || 
-        stockLower.includes('indisponivel') ||
+        stockLower.includes('indisponível') ||
         stockLower.includes('esgotado') ||
         stockLower.includes('ruptura')
     ) {
@@ -294,6 +174,7 @@ function processStock(stockString) {
         return 0;
     }
     
+    // Verificar stock reduzido
     if (
         stockLower.includes('reduzido') || 
         stockLower.includes('< 2') ||
@@ -303,15 +184,17 @@ function processStock(stockString) {
         return 1;
     }
     
+    // Verificar stock disponível mas limitado
     if (
         stockLower.includes('disponivel') || 
-        stockLower.includes('disponivel') ||
+        stockLower.includes('disponível') ||
         stockLower.includes('< 10')
     ) {
-        console.log('   Stock disponivel limitado, definindo como 5');
+        console.log('   Stock disponível limitado, definindo como 5');
         return 5;
     }
     
+    // Verificar stock abundante
     if (
         stockLower.includes('abundante') || 
         stockLower.includes('> 10') ||
@@ -321,90 +204,53 @@ function processStock(stockString) {
         return 20;
     }
     
-    console.log('   Padrao de stock nao reconhecido, definindo como 0 por seguranca');
+    // Valor padrão para casos não identificados
+    console.log('   Padrão de stock não reconhecido, definindo como 0 por segurança');
     return 0;
 }
 
+// Função para verificar se um produto já existe na Shopify
 async function checkProductExists(restClient, ean) {
     try {
-        console.log('Verificando se produto com EAN ' + ean + ' ja existe na Shopify...');
+        console.log(`Verificando se produto com EAN ${ean} já existe na Shopify...`);
         
-        let allProducts = [];
-        let sinceId = null;
-        let pageCount = 0;
-        
-        console.log('Carregando todos os produtos da Shopify para verificacao...');
-        
-        while (pageCount < 10) {
-            pageCount++;
-            
-            const params = {
-                limit: 250,
+        // Buscar produtos por SKU
+        const skuResponse = await restClient.get('/products.json', {
+            params: {
+                query: `sku:${ean}`,
                 fields: 'id,title,variants'
-            };
-            
-            if (sinceId) {
-                params.since_id = sinceId;
             }
-            
-            console.log('Carregando pagina ' + pageCount + ' de produtos...');
-            
-            try {
-                const response = await restClient.get('/products.json', { params });
-                
-                if (!response.data || !response.data.products || response.data.products.length === 0) {
-                    console.log('Nenhum produto encontrado nesta pagina - fim da busca');
-                    break;
-                }
-                
-                console.log('Produtos encontrados na pagina ' + pageCount + ': ' + response.data.products.length);
-                allProducts = allProducts.concat(response.data.products);
-                
-                const lastProduct = response.data.products[response.data.products.length - 1];
-                sinceId = lastProduct.id;
-                
-                if (response.data.products.length < 250) {
-                    console.log('Ultima pagina alcancada');
-                    break;
-                }
-                
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-            } catch (pageError) {
-                console.log('Erro ao carregar pagina ' + pageCount + ':', pageError.message);
-                break;
-            }
+        });
+        
+        if (skuResponse.data && skuResponse.data.products && skuResponse.data.products.length > 0) {
+            const product = skuResponse.data.products[0];
+            console.log(`Produto encontrado por SKU: ${product.title} (ID: ${product.id})`);
+            return product;
         }
         
-        console.log('Total de produtos carregados: ' + allProducts.length);
-        
-        console.log('Procurando produto com EAN: ' + ean);
-        
-        for (const product of allProducts) {
-            if (product.variants && product.variants.length > 0) {
-                for (const variant of product.variants) {
-                    const variantSku = variant.sku ? variant.sku.trim() : '';
-                    const variantBarcode = variant.barcode ? variant.barcode.trim() : '';
-                    const searchEan = ean.trim();
-                    
-                    if (variantSku === searchEan || variantBarcode === searchEan) {
-                        console.log('PRODUTO ENCONTRADO! ' + product.title + ' (ID: ' + product.id + ')');
-                        console.log('   Encontrado por: ' + (variantSku === searchEan ? 'SKU' : 'Barcode'));
-                        return product;
-                    }
-                }
+        // Se não encontrou por SKU, buscar por barcode
+        const barcodeResponse = await restClient.get('/products.json', {
+            params: {
+                query: `barcode:${ean}`,
+                fields: 'id,title,variants'
             }
+        });
+        
+        if (barcodeResponse.data && barcodeResponse.data.products && barcodeResponse.data.products.length > 0) {
+            const product = barcodeResponse.data.products[0];
+            console.log(`Produto encontrado por barcode: ${product.title} (ID: ${product.id})`);
+            return product;
         }
         
-        console.log('Nenhum produto encontrado com EAN ' + ean);
+        console.log(`Nenhum produto encontrado com EAN ${ean}`);
         return null;
-        
     } catch (error) {
-        console.log('Erro ao verificar existencia do produto: ' + error.message);
+        console.log(`Erro ao verificar existência do produto: ${error.message}`);
         return null;
     }
 }
 
+// Função para consultar API Suprides com autenticação corrigida
 async function getProductFromSupplier(ean) {
     try {
         console.log('Consultando API Suprides para EAN:', ean);
@@ -570,282 +416,63 @@ async function getProductFromSupplier(ean) {
     }
 }
 
-async function updateProductViaREST(restClient, existingProduct, supplierProduct) {
+// Função para atualizar produto existente
+async function updateProductViaREST(restClient, existingProduct, productData) {
     try {
-        console.log('Atualizando produto via REST API...');
-        console.log('   ID:', existingProduct.id);
-        console.log('   Titulo:', supplierProduct.name);
+        console.log('Atualizando produto via REST API:', productData.name);
         
-        const { costPrice, retailPrice } = processProductPrices(supplierProduct);
-        const stock = processStock(supplierProduct.stock);
-        const tags = generateProductTags(supplierProduct);
+        const { costPrice, retailPrice } = processProductPrices(productData);
+        const tags = generateProductTags(productData);
         
-        console.log('Tags geradas:', tags);
+        // Processar stock
+        const inventory_quantity = processStock(productData.stock);
         
-        const productData = {
+        const productUpdateData = {
             product: {
                 id: existingProduct.id,
-                title: supplierProduct.name,
-                body_html: supplierProduct.description || '',
-                vendor: supplierProduct.brand || '',
-                product_type: tags.length > 1 ? tags[1] : 'Produto',
+                title: productData.name,
+                body_html: (productData.short_description || '') + "\n\n" + (productData.description || ''),
+                vendor: productData.brand || '',
+                product_type: productData.family || '',
                 tags: tags.join(', ')
             }
         };
         
-        const productResponse = await restClient.put('/products/' + existingProduct.id + '.json', productData);
-        console.log('Produto atualizado com sucesso via REST API!');
+        console.log('Atualizando produto via REST API...');
+        console.log('   ID:', existingProduct.id);
+        console.log('   Titulo:', productUpdateData.product.title);
+        console.log('   Tags:', productUpdateData.product.tags);
+        
+        const productResponse = await restClient.put(`/products/${existingProduct.id}.json`, productUpdateData);
         
         if (existingProduct.variants && existingProduct.variants.length > 0) {
             const variantId = existingProduct.variants[0].id;
             
-            const variantData = {
+            const variantUpdateData = {
                 variant: {
                     id: variantId,
                     price: retailPrice.toFixed(2),
-                    compare_at_price: retailPrice > costPrice ? retailPrice.toFixed(2) : null,
-                    sku: supplierProduct.ean,
-                    barcode: supplierProduct.ean,
-                    inventory_quantity: stock,
-                    inventory_management: 'shopify'
+                    cost: costPrice.toFixed(2),
+                    inventory_quantity: inventory_quantity,
+                    sku: productData.ean,
+                    barcode: productData.ean
                 }
             };
             
-            const variantResponse = await restClient.put('/variants/' + variantId + '.json', variantData);
-            console.log('Variant atualizada com sucesso via REST API!');
-            console.log('   Preco final:', retailPrice + ' euros');
-            console.log('   Stock final:', stock);
+            console.log('Atualizando variant via REST API...');
+            console.log('   Variant ID:', variantId);
+            console.log('   Preco:', variantUpdateData.variant.price);
+            console.log('   Custo:', variantUpdateData.variant.cost);
+            console.log('   Stock:', variantUpdateData.variant.inventory_quantity);
+            
+            const variantResponse = await restClient.put(`/variants/${variantId}.json`, variantUpdateData);
+            console.log('Variant atualizada com sucesso!');
         }
         
+        console.log('Produto atualizado com sucesso na Shopify!');
         return true;
         
     } catch (error) {
         console.log('Erro ao atualizar produto via REST API:', error.message);
         if (error.response && error.response.data) {
-            console.log('Detalhes do erro:', JSON.stringify(error.response.data, null, 2));
-        }
-        return false;
-    }
-}
-
-async function createProductViaREST(restClient, supplierProduct) {
-    try {
-        console.log('Criando produto via REST API:', supplierProduct.name);
-        
-        const { costPrice, retailPrice } = processProductPrices(supplierProduct);
-        const stock = processStock(supplierProduct.stock);
-        const tags = generateProductTags(supplierProduct);
-        
-        console.log('Tags geradas:', tags);
-        
-        const productData = {
-            product: {
-                title: supplierProduct.name,
-                body_html: supplierProduct.description || '',
-                vendor: supplierProduct.brand || '',
-                product_type: tags.length > 1 ? tags[1] : 'Produto',
-                tags: tags.join(', '),
-                variants: [{
-                    price: retailPrice.toFixed(2),
-                    compare_at_price: retailPrice > costPrice ? retailPrice.toFixed(2) : null,
-                    sku: supplierProduct.ean,
-                    barcode: supplierProduct.ean,
-                    inventory_quantity: stock,
-                    inventory_management: 'shopify'
-                }]
-            }
-        };
-        
-        if (supplierProduct.images && supplierProduct.images.length > 0) {
-            productData.product.images = supplierProduct.images.map(imageUrl => ({
-                src: imageUrl
-            }));
-        }
-        
-        const response = await restClient.post('/products.json', productData);
-        console.log('Produto criado com sucesso via REST API!');
-        console.log('   ID:', response.data.product.id);
-        console.log('   Preco final:', retailPrice + ' euros');
-        console.log('   Stock final:', stock);
-        
-        return response.data.product;
-        
-    } catch (error) {
-        console.log('Erro ao criar produto via REST API:', error.message);
-        if (error.response && error.response.data) {
-            console.log('Detalhes do erro:', JSON.stringify(error.response.data, null, 2));
-        }
-        return null;
-    }
-}
-
-async function getAllProductsFromShopify(shopifyClient) {
-    try {
-        console.log('Obtendo produtos da Shopify via REST API...');
-        
-        const storeUrl = process.env.SHOPIFY_STORE_URL;
-        const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
-        
-        if (!storeUrl || !accessToken) {
-            throw new Error('Variaveis de ambiente SHOPIFY_STORE_URL ou SHOPIFY_ACCESS_TOKEN nao definidas');
-        }
-        
-        let storeDomain = storeUrl;
-        if (storeUrl.includes('://')) {
-            storeDomain = storeUrl.split('://')[1];
-        }
-        if (!storeDomain.includes('.myshopify.com')) {
-            storeDomain = storeDomain + '.myshopify.com';
-        }
-        
-        const restClient = axios.create({
-            baseURL: 'https://' + storeDomain + '/admin/api/2024-07',
-            headers: {
-                'X-Shopify-Access-Token': accessToken,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        try {
-            const shopResponse = await restClient.get('/shop.json');
-            console.log('Conexao com Shopify estabelecida: ' + shopResponse.data.shop.name);
-        } catch (connectionError) {
-            console.log('Erro ao conectar com Shopify: ' + connectionError.message);
-            throw new Error('Falha na conexao com Shopify: ' + connectionError.message);
-        }
-        
-        const productsListPath = path.join(__dirname, '../../productsList.txt');
-        
-        console.log('Procurando lista de EANs em:', productsListPath);
-        
-        if (!fs.existsSync(productsListPath)) {
-            console.error('Ficheiro productsList.txt nao encontrado em:', productsListPath);
-            throw new Error('Ficheiro productsList.txt nao encontrado em: ' + productsListPath);
-        }
-        
-        const productsListContent = fs.readFileSync(productsListPath, 'utf8');
-        console.log('Lendo lista de EANs...');
-        console.log('Conteudo (primeiros 200 chars):', productsListContent.substring(0, 200));
-        
-        let localEANs;
-        try {
-            if (productsListContent.trim().startsWith('[')) {
-                console.log('Detectado formato JSON');
-                localEANs = JSON.parse(productsListContent);
-            } else {
-                console.log('Detectado formato simples (um EAN por linha)');
-                
-                const lines = productsListContent
-                    .split(/\r?\n/)
-                    .map(line => line.trim())
-                    .filter(line => line.length > 0);
-                
-                localEANs = lines.filter(line => {
-                    const isValid = line && line.length >= 8 && line.length <= 20 && /^[0-9]+$/.test(line);
-                    if (line && !isValid) {
-                        console.log('EAN invalido ignorado:', line);
-                    }
-                    return isValid;
-                });
-            }
-        } catch (parseError) {
-            console.error('Erro ao fazer parse:', parseError.message);
-            throw new Error('productsList.txt nao contem um array valido');
-        }
-        
-        if (!Array.isArray(localEANs) || localEANs.length === 0) {
-            throw new Error('productsList.txt nao contem EANs validos');
-        }
-        
-        console.log(localEANs.length + ' EANs encontrados na lista local');
-        
-        let successCount = 0;
-        let errorCount = 0;
-        let skippedCount = 0;
-        
-        for (let i = 0; i < localEANs.length; i++) {
-            const ean = localEANs[i];
-            
-            if (!ean || ean.trim() === '') {
-                console.log('EAN vazio ignorado na posicao ' + i);
-                skippedCount++;
-                continue;
-            }
-            
-            console.log('Processando EAN ' + (i + 1) + '/' + localEANs.length + ': ' + ean);
-            
-            try {
-                const existingProduct = await checkProductExists(restClient, ean);
-                
-                if (existingProduct) {
-                    console.log('Produto ja existe na Shopify (SKU/EAN: ' + ean + ') - atualizando...');
-                    
-                    console.log('Consultando API Suprides para atualizacao do EAN:', ean);
-                    const supplierProduct = await getProductFromSupplier(ean);
-                    
-                    if (supplierProduct) {
-                        console.log('Dados obtidos da Suprides para atualizacao:', supplierProduct.name);
-                        const updateSuccess = await updateProductViaREST(restClient, existingProduct, supplierProduct);
-                        
-                        if (updateSuccess) {
-                            console.log('Produto atualizado com sucesso na Shopify!');
-                            successCount++;
-                        } else {
-                            console.log('Falha ao atualizar produto na Shopify');
-                            errorCount++;
-                        }
-                    } else {
-                        console.log('Produto nao encontrado na API Suprides para atualizacao');
-                        errorCount++;
-                    }
-                } else {
-                    console.log('Produto nao existe na Shopify - obtendo dados da Suprides...');
-                    
-                    const supplierProduct = await getProductFromSupplier(ean);
-                    
-                    if (supplierProduct) {
-                        const createdProduct = await createProductViaREST(restClient, supplierProduct);
-                        
-                        if (createdProduct) {
-                            console.log('Produto criado com sucesso na Shopify!');
-                            successCount++;
-                        } else {
-                            console.log('Falha ao criar produto na Shopify');
-                            errorCount++;
-                        }
-                    } else {
-                        console.log('Produto nao encontrado na API Suprides');
-                        errorCount++;
-                    }
-                }
-                
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-            } catch (productError) {
-                console.log('Erro ao processar o EAN ' + ean + ':', productError.message);
-                errorCount++;
-            }
-        }
-        
-        console.log('Sincronizacao concluida!');
-        console.log('   Total processados: ' + localEANs.length);
-        console.log('   Sucessos: ' + successCount);
-        console.log('   Erros: ' + errorCount);
-        console.log('   Ignorados (vazios): ' + skippedCount);
-        console.log('   Taxa de sucesso: ' + ((successCount / (successCount + errorCount)) * 100).toFixed(1) + '%');
-        
-        return {
-            total: localEANs.length,
-            success: successCount,
-            errors: errorCount,
-            skipped: skippedCount
-        };
-        
-    } catch (error) {
-        console.error('Erro fatal na sincronizacao:', error.message);
-        throw error;
-    }
-}
-
-module.exports = getAllProductsFromShopify;
-
+            console.log('Detalhes do erro
