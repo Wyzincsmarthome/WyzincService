@@ -17,12 +17,14 @@ async function getProductFromSupplier(ean) {
         console.log('   API_PASSWORD:', apiPassword ? 'Definido' : 'Nao definido');
         console.log('   API_TOKEN:', apiToken ? 'Definido' : 'Nao definido');
         
-        // Método 1: Bearer Token com campo user
+        // Método 1: GET com user, password e token nos parâmetros
         try {
-            console.log('Tentativa 1: Bearer Token com campo user');
+            console.log('Tentativa 1: GET com user, password e token nos parametros');
             const response1 = await axios.get('https://www.suprides.pt/rest/V1/integration/products-list', {
                 params: {
                     user: apiUser,
+                    password: apiPassword,
+                    token: apiToken,
                     searchCriteria: JSON.stringify({
                         filterGroups: [{
                             filters: [{
@@ -34,7 +36,6 @@ async function getProductFromSupplier(ean) {
                     })
                 },
                 headers: {
-                    'Authorization': 'Bearer ' + apiToken,
                     'Content-Type': 'application/json'
                 },
                 timeout: 15000
@@ -44,9 +45,16 @@ async function getProductFromSupplier(ean) {
             console.log('Tentativa 1 - Resposta:', JSON.stringify(response1.data, null, 2));
             
             if (response1.status === 200 && Array.isArray(response1.data) && response1.data.length > 0) {
-                const product = response1.data[0];
-                console.log('Produto encontrado na API (Tentativa 1):', product.name || 'Nome nao disponivel');
-                return product;
+                const rawProduct = response1.data[0];
+                
+                // Verificar se não é um erro
+                if (rawProduct.status === 'ERROR') {
+                    console.log('Erro retornado pela API:', rawProduct.message);
+                    throw new Error('API retornou erro: ' + rawProduct.message);
+                }
+                
+                console.log('Produto encontrado na API (Tentativa 1):', rawProduct.name || 'Nome nao disponivel');
+                return rawProduct;
             }
         } catch (error1) {
             console.log('Tentativa 1 falhou:', error1.message);
@@ -56,9 +64,9 @@ async function getProductFromSupplier(ean) {
             }
         }
         
-        // Método 2: POST com dados no body
+        // Método 2: POST com dados completos no body
         try {
-            console.log('Tentativa 2: POST com dados no body');
+            console.log('Tentativa 2: POST com dados completos no body');
             const response2 = await axios.post('https://www.suprides.pt/rest/V1/integration/products-list', {
                 user: apiUser,
                 password: apiPassword,
@@ -83,9 +91,16 @@ async function getProductFromSupplier(ean) {
             console.log('Tentativa 2 - Resposta:', JSON.stringify(response2.data, null, 2));
             
             if (response2.status === 200 && Array.isArray(response2.data) && response2.data.length > 0) {
-                const product = response2.data[0];
-                console.log('Produto encontrado na API (Tentativa 2):', product.name || 'Nome nao disponivel');
-                return product;
+                const rawProduct = response2.data[0];
+                
+                // Verificar se não é um erro
+                if (rawProduct.status === 'ERROR') {
+                    console.log('Erro retornado pela API:', rawProduct.message);
+                    throw new Error('API retornou erro: ' + rawProduct.message);
+                }
+                
+                console.log('Produto encontrado na API (Tentativa 2):', rawProduct.name || 'Nome nao disponivel');
+                return rawProduct;
             }
         } catch (error2) {
             console.log('Tentativa 2 falhou:', error2.message);
@@ -95,9 +110,9 @@ async function getProductFromSupplier(ean) {
             }
         }
         
-        // Método 3: GET com user nos headers
+        // Método 3: GET com credenciais nos headers
         try {
-            console.log('Tentativa 3: GET com user nos headers');
+            console.log('Tentativa 3: GET com credenciais nos headers');
             const response3 = await axios.get('https://www.suprides.pt/rest/V1/integration/products-list', {
                 params: {
                     searchCriteria: JSON.stringify({
@@ -114,6 +129,7 @@ async function getProductFromSupplier(ean) {
                     'Authorization': 'Bearer ' + apiToken,
                     'X-User': apiUser,
                     'X-Password': apiPassword,
+                    'X-Token': apiToken,
                     'Content-Type': 'application/json'
                 },
                 timeout: 15000
@@ -123,9 +139,16 @@ async function getProductFromSupplier(ean) {
             console.log('Tentativa 3 - Resposta:', JSON.stringify(response3.data, null, 2));
             
             if (response3.status === 200 && Array.isArray(response3.data) && response3.data.length > 0) {
-                const product = response3.data[0];
-                console.log('Produto encontrado na API (Tentativa 3):', product.name || 'Nome nao disponivel');
-                return product;
+                const rawProduct = response3.data[0];
+                
+                // Verificar se não é um erro
+                if (rawProduct.status === 'ERROR') {
+                    console.log('Erro retornado pela API:', rawProduct.message);
+                    throw new Error('API retornou erro: ' + rawProduct.message);
+                }
+                
+                console.log('Produto encontrado na API (Tentativa 3):', rawProduct.name || 'Nome nao disponivel');
+                return rawProduct;
             }
         } catch (error3) {
             console.log('Tentativa 3 falhou:', error3.message);
@@ -135,12 +158,13 @@ async function getProductFromSupplier(ean) {
             }
         }
         
-        // Método 4: Basic Auth com user no query
+        // Método 4: Formato de autenticação customizado
         try {
-            console.log('Tentativa 4: Basic Auth com user no query');
-            const response4 = await axios.get('https://www.suprides.pt/rest/V1/integration/products-list', {
+            console.log('Tentativa 4: Formato de autenticacao customizado');
+            const authString = `user=${apiUser}&password=${apiPassword}&token=${apiToken}`;
+            
+            const response4 = await axios.get('https://www.suprides.pt/rest/V1/integration/products-list?' + authString, {
                 params: {
-                    user: apiUser,
                     searchCriteria: JSON.stringify({
                         filterGroups: [{
                             filters: [{
@@ -150,10 +174,6 @@ async function getProductFromSupplier(ean) {
                             }]
                         }]
                     })
-                },
-                auth: {
-                    username: apiUser,
-                    password: apiPassword
                 },
                 headers: {
                     'Content-Type': 'application/json'
@@ -165,9 +185,16 @@ async function getProductFromSupplier(ean) {
             console.log('Tentativa 4 - Resposta:', JSON.stringify(response4.data, null, 2));
             
             if (response4.status === 200 && Array.isArray(response4.data) && response4.data.length > 0) {
-                const product = response4.data[0];
-                console.log('Produto encontrado na API (Tentativa 4):', product.name || 'Nome nao disponivel');
-                return product;
+                const rawProduct = response4.data[0];
+                
+                // Verificar se não é um erro
+                if (rawProduct.status === 'ERROR') {
+                    console.log('Erro retornado pela API:', rawProduct.message);
+                    throw new Error('API retornou erro: ' + rawProduct.message);
+                }
+                
+                console.log('Produto encontrado na API (Tentativa 4):', rawProduct.name || 'Nome nao disponivel');
+                return rawProduct;
             }
         } catch (error4) {
             console.log('Tentativa 4 falhou:', error4.message);
