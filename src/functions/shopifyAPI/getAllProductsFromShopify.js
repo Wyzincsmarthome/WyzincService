@@ -475,4 +475,285 @@ async function updateProductViaREST(restClient, existingProduct, productData) {
     } catch (error) {
         console.log('Erro ao atualizar produto via REST API:', error.message);
         if (error.response && error.response.data) {
-            console.log('Detalhes do erro
+            console.log('Detalhes do erro:', JSON.stringify(error.response.data, null, 2));
+        }
+        return false;
+    }
+}
+
+// Função para criar novo produto
+async function createProductViaREST(restClient, productData) {
+    try {
+        console.log('Criando produto via REST API:', productData.name);
+        
+        const { costPrice, retailPrice } = processProductPrices(productData);
+        const tags = generateProductTags(productData);
+        
+        // Processar stock
+        const inventory_quantity = processStock(productData.stock);
+        
+        const productCreateData = {
+            product: {
+                title: productData.name,
+                body_html: (productData.short_description || '') + "\n\n" + (productData.description || ''),
+                vendor: productData.brand || '',
+                product_type: productData.family || '',
+                tags: tags.join(', '),
+                variants: [{
+                    price: retailPrice.toFixed(2),
+                    cost: costPrice.toFixed(2),
+                    inventory_quantity: inventory_quantity,
+                    sku: productData.ean,
+                    barcode: productData.ean
+                }]
+            }
+        };
+        
+        // Adicionar imagens se disponíveis
+        if (productData.images && productData.images.length > 0) {
+            productCreateData.product.images = productData.images.map(imageUrl => ({
+                src: imageUrl
+            }));
+        }
+        
+        console.log('Criando produto via REST API...');
+        console.log('   Titulo:', productCreateData.product.title);
+        console.log('   Tags:', productCreateData.product.tags);
+        console.log('   Preco:', productCreateData.product.variants[0].price);
+        console.log('   Custo:', productCreateData.product.variants[0].cost);
+        console.log('   Stock:', productCreateData.product.variants[0].inventory_quantity);
+        
+        const response = await restClient.post('/products.json', productCreateData);
+        console.log('Produto criado com sucesso na Shopify!');
+        console.log('   ID:', response.data.product.id);
+        
+        return response.data.product;
+        
+    } catch (error) {
+        console.log('Erro ao criar produto via REST API:', error.message);
+        if (error.response && error.response.data) {
+            console.log('Detalhes do erro:', JSON.stringify(error.response.data, null, 2));
+        }
+        return null;
+    }
+}
+
+// Função principal
+async function getAllProductsFromShopify(shopifyClient) {
+    try {
+        console.log('Obtendo produtos da Shopify via REST API...');
+        
+        const storeUrl = process.env.SHOPIFY_STORE_URL;
+        const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
+        
+        if (!storeUrl || !accessToken) {
+            throw new Error('Variaveis de ambiente SHOPIFY_STORE_URL ou SHOPIFY_ACCESS_TOKEN nao definidas');
+        }
+        
+        let storeDomain = storeUrl;
+        if (storeUrl.includes('://')) {
+            storeDomain = storeUrl.split('://')[1];
+        }
+        if (!storeDomain.includes('.myshopify.com')) {
+            storeDomain = storeDomain + '.myshopify.com';
+        }
+        
+        // Criar cliente REST
+        const restClient = axios.create({
+            baseURL: `https://${storeDomain}/admin/api/2024-07`,
+            headers: {
+                'X-Shopify-Access-Token': accessToken,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        // Testar conexão
+        try {
+            const shopResponse = await restClient.get('/shop.json');
+            console.log(`Conexão com Shopify estabelecida: ${shopResponse.data.shop.name}`);
+        } catch (connectionError) {
+            console.log(`Erro ao conectar com Shopify: ${connectionError.message}`);
+            if (connectionError.response) {
+                console.log(`Status: ${connectionError.response.status}`);
+                console.log(`Dados: ${JSON.stringify(connectionError.response.data)}`);
+            }
+            throw new Error(`Falha na conexão com Shopify: ${connectionError.message}`);
+        }
+        
+        // Ler lista de EANs
+        const productsListPath = path.join(__dirname, '../../productsList.txt');
+        
+        console.log('Procurando lista de EANs em:', productsListPath);
+        
+        if (!fs.existsSync(productsListPath)) {
+            console.error('Ficheiro productsList.txt nao encontrado em:', productsListPath);
+            throw new Error('Ficheiro productsList.txt nao encontrado em: ' + productsListPath);
+        }
+        
+        const productsListContent = fs.readFileSync(productsListPath, 'utf8');
+        console.log('Lendo lista de EANs...');
+        console.log('Conteudo (primeiros 200 chars):', productsListContent.substring(0, 200));
+        
+        // Processar lista de EANs
+        let localEANs;
+        try {
+            if (productsListContent.trim().startsWith('[')) {
+                console.log('Detectado formato JSON');
+                localEANs = JSON.parse(productsListContent);
+            } else {
+                console.log('Detectado formato simples (um EAN por linha)');
+                
+                const lines = productsListContent
+                    .split(/\r?\n/)
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+                
+                console.log('Linhas apos split:', lines);
+                
+                localEANs = lines.filter(line => {
+                    const isValid = line && line.length >= 8 && line.length <= 20 && /^[0-9]+$/.test(line);
+                    if (line && !isValid) {
+                        console.log('EAN invalido ignorado:', line, '(comprimento:', line.length, ')');
+                    } else if (isValid) {
+                        console.log('EAN valido encontrado:', line);
+                    }
+                    return isValid;
+                });
+                
+                console.log('EANs apos validacao:', localEANs);
+            }
+        } catch (parseError) {
+            console.error('Erro ao fazer parse:', parseError.message);
+            console.error('Conteudo completo:', productsListContent);
+            throw new Error('Erro ao fazer parse do productsList.txt: ' + parseError.message);
+        }
+        
+        if (!Array.isArray(localEANs)) {
+            console.error('Conteudo nao e um array');
+            console.error('Tipo:', typeof localEANs);
+            console.error('Conteudo:', localEANs);
+            throw new Error('productsList.txt nao contem um array valido de EANs');
+        }
+        
+        console.log(localEANs.length + ' EANs encontrados na lista local');
+        
+        if (localEANs.length === 0) {
+            console.log('Nenhum EAN valido encontrado na lista local');
+            return {
+                processed: 0,
+                success: 0,
+                errors: 0,
+                skipped: 0
+            };
+        }
+        
+        // Processar cada EAN
+        let processedCount = 0;
+        let successCount = 0;
+        let errorCount = 0;
+        let skippedCount = 0;
+        
+        for (const ean of localEANs) {
+            processedCount++;
+            
+            console.log('Processando EAN ' + processedCount + '/' + localEANs.length + ': ' + ean);
+            
+            // Verificar se produto já existe
+            const existingProduct = await checkProductExists(restClient, ean);
+            
+            if (existingProduct) {
+                console.log('Produto ja existe na Shopify (SKU/EAN: ' + ean + ') - atualizando...');
+                console.log('ID do produto existente:', existingProduct.id);
+                console.log('Título do produto existente:', existingProduct.title);
+                
+                try {
+                    console.log('Consultando API Suprides para atualizacao do EAN:', ean);
+                    const productData = await getProductFromSupplier(ean);
+                    
+                    if (!productData) {
+                        console.log('Produto nao encontrado na API Suprides para EAN:', ean);
+                        errorCount++;
+                        continue;
+                    }
+                    
+                    console.log('Dados obtidos da Suprides para atualizacao:', productData.name || 'Nome nao disponivel');
+                    
+                    const updateSuccess = await updateProductViaREST(restClient, existingProduct, productData);
+                    
+                    if (updateSuccess) {
+                        successCount++;
+                        console.log('Produto atualizado com sucesso na Shopify!');
+                    } else {
+                        errorCount++;
+                        console.log('Falha ao atualizar produto na Shopify');
+                    }
+                    
+                } catch (updateError) {
+                    errorCount++;
+                    console.log('Erro ao atualizar produto EAN ' + ean + ':', updateError.message);
+                }
+                
+                // Delay entre requests
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                continue;
+            }
+            
+            console.log('Produto nao existe na Shopify - obtendo dados da Suprides...');
+            
+            try {
+                console.log('Consultando API Suprides para EAN:', ean);
+                const productData = await getProductFromSupplier(ean);
+                
+                if (!productData) {
+                    console.log('Produto nao encontrado na API Suprides para EAN:', ean);
+                    errorCount++;
+                    continue;
+                }
+                
+                console.log('Dados obtidos da Suprides:', productData.name || 'Nome nao disponivel');
+                
+                const createdProduct = await createProductViaREST(restClient, productData);
+                
+                if (createdProduct) {
+                    successCount++;
+                    console.log('Produto criado com sucesso na Shopify!');
+                } else {
+                    errorCount++;
+                    console.log('Falha ao criar produto na Shopify');
+                }
+                
+                // Delay entre requests
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+            } catch (createError) {
+                errorCount++;
+                console.log('Erro ao processar EAN ' + ean + ':', createError.message);
+                
+                if (createError.message.includes('API do fornecedor')) {
+                    console.log('Sugestao: Verificar credenciais da API Suprides (API_USER, API_PASSWORD, API_TOKEN)');
+                }
+            }
+        }
+        
+        console.log('Sincronizacao concluida!');
+        console.log('   Total processados:', processedCount);
+        console.log('   Sucessos:', successCount);
+        console.log('   Erros:', errorCount);
+        console.log('   Ignorados (vazios/existentes):', skippedCount);
+        console.log('   Taxa de sucesso:', ((successCount / Math.max(processedCount - skippedCount, 1)) * 100).toFixed(1) + '%');
+        
+        return {
+            processed: processedCount,
+            success: successCount,
+            errors: errorCount,
+            skipped: skippedCount
+        };
+        
+    } catch (error) {
+        console.log('Erro fatal na sincronizacao:', error.message);
+        throw error;
+    }
+}
+
+module.exports = getAllProductsFromShopify;
+
