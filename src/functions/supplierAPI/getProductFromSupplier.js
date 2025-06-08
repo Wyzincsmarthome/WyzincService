@@ -1,8 +1,8 @@
 const axios = require('axios');
 
 async function getProductFromSupplier(ean, retryCount = 0) {
-    const maxRetries = 3;
-    const timeoutMs = 60000; // Aumentado para 60 segundos
+    const maxRetries = 5; // Mais tentativas
+    const timeoutMs = 120000; // 2 minutos - muito mais tempo
     
     try {
         console.log(`Consultando API Suprides para EAN: ${ean} (tentativa ${retryCount + 1}/${maxRetries + 1})`);
@@ -147,8 +147,9 @@ async function getProductFromSupplier(ean, retryCount = 0) {
                 
                 // Retry logic
                 if (retryCount < maxRetries) {
-                    const waitTime = (retryCount + 1) * 5000; // 5s, 10s, 15s
+                    const waitTime = Math.min((retryCount + 1) * 10000, 60000); // 10s, 20s, 30s, 40s, 50s, max 60s
                     console.log(`🔄 Tentando novamente em ${waitTime/1000}s... (${retryCount + 1}/${maxRetries})`);
+                    console.log('💡 Dica: A API Suprides pode estar temporariamente sobrecarregada');
                     
                     // Aguardar antes do retry
                     await new Promise(resolve => setTimeout(resolve, waitTime));
