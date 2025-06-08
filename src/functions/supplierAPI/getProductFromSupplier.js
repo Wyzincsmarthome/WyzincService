@@ -1,8 +1,11 @@
 const axios = require('axios');
 
-async function getProductFromSupplier(ean) {
+async function getProductFromSupplier(ean, retryCount = 0) {
+    const maxRetries = 3;
+    const timeoutMs = 60000; // Aumentado para 60 segundos
+    
     try {
-        console.log('Consultando API Suprides para EAN:', ean);
+        console.log(`Consultando API Suprides para EAN: ${ean} (tentativa ${retryCount + 1}/${maxRetries + 1})`);
         
         const apiUser = process.env.API_USER;
         const apiPassword = process.env.API_PASSWORD;
@@ -16,10 +19,13 @@ async function getProductFromSupplier(ean) {
         console.log('   API_USER:', apiUser);
         console.log('   API_PASSWORD:', apiPassword ? 'Definido' : 'Nao definido');
         console.log('   API_TOKEN:', apiToken ? 'Definido' : 'Nao definido');
+        console.log(`   TIMEOUT: ${timeoutMs}ms (${timeoutMs/1000}s)`);
         
         // A API precisa de user E password nos parâmetros + Bearer token nos headers
         try {
             console.log('Tentativa: Bearer token + user + password nos parametros');
+            console.log('🕐 Aguardando resposta da API...');
+            
             const response = await axios.get('https://www.suprides.pt/rest/V1/integration/products-list', {
                 params: {
                     user: apiUser,
@@ -38,10 +44,10 @@ async function getProductFromSupplier(ean) {
                     'Authorization': 'Bearer ' + apiToken,
                     'Content-Type': 'application/json'
                 },
-                timeout: 15000
+                timeout: timeoutMs // Timeout aumentado
             });
             
-            console.log('Status:', response.status);
+            console.log('✅ Resposta recebida! Status:', response.status);
             console.log('Resposta completa:', JSON.stringify(response.data, null, 2));
             
             if (response.status === 200 && Array.isArray(response.data) && response.data.length > 0) {
@@ -133,7 +139,28 @@ async function getProductFromSupplier(ean) {
             }
             
         } catch (error) {
-            console.log('Erro ao consultar API Suprides:', error.message);
+            console.log(`❌ Erro ao consultar API Suprides (tentativa ${retryCount + 1}):`, error.message);
+            
+            // Verificar se é um timeout
+            if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+                console.log('⏰ Erro de timeout detectado');
+                
+                // Retry logic
+                if (retryCount < maxRetries) {
+                    const waitTime = (retryCount + 1) * 5000; // 5s, 10s, 15s
+                    console.log(`🔄 Tentando novamente em ${waitTime/1000}s... (${retryCount + 1}/${maxRetries})`);
+                    
+                    // Aguardar antes do retry
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    
+                    // Retry recursivo
+                    return await getProductFromSupplier(ean, retryCount + 1);
+                } else {
+                    console.log('❌ Todas as tentativas falharam por timeout');
+                    return null;
+                }
+            }
+            
             if (error.response) {
                 console.log('   Status:', error.response.status);
                 console.log('   Dados:', JSON.stringify(error.response.data, null, 2));
