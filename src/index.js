@@ -1,9 +1,7 @@
 require('dotenv').config();
 require('colors');
 
-const fs = require('fs');
-const { getProductFromSupplier } = require('./functions/supplierAPI');
-const { createAuth, getAllProductsFromShopify, updateProductFromShopify, createProductToShopify } = require('./functions/shopifyAPI');
+const { createAuth, getAllProductsFromShopify } = require('./functions/shopifyAPI');
 const { sendMessage } = require('./functions/discordAPI');
 
 async function executeAsyncTask() {
@@ -11,66 +9,52 @@ async function executeAsyncTask() {
         console.log('🚀 Iniciando sincronização de produtos...'.green);
         console.log(`⏰ Timestamp: ${new Date().toISOString()}`.cyan);
         
-        /* > Criar Cliente Shopify */
+        // Criar Cliente Shopify
         console.log('🔗 Criando cliente Shopify...'.yellow);
-        let shopifyClient = await createAuth();
+        const shopifyClient = await createAuth();
         
-        /* > NOVO SISTEMA: Usar getAllProductsFromShopify que já faz tudo */
-        console.log('📄 Lendo lista de produtos...'.yellow);
-        
-        // CORREÇÃO: Verificar se ficheiro existe
-        const productsListPath = 'src/productsList.txt';
-        if (!fs.existsSync(productsListPath)) {
-            throw new Error(`Ficheiro ${productsListPath} não encontrado`);
+        if (!shopifyClient) {
+            throw new Error('Falha ao criar cliente Shopify');
         }
         
-        const productsListContent = fs.readFileSync(productsListPath, 'utf8');
+        console.log('✅ Cliente Shopify criado com sucesso'.green);
         
-        // CORREÇÃO: Parsing robusto (suporta formato simples e JSON)
-        let EANProductsList;
-        if (productsListContent.trim().startsWith('[')) {
-            // Formato JSON
-            EANProductsList = JSON.parse(productsListContent);
-        } else {
-            // Formato simples (um EAN por linha)
-            EANProductsList = productsListContent
-                .split(/\r?\n/)  // CORREÇÃO: Split correto
-                .map(line => line.trim())
-                .filter(line => line.length > 0 && /^[0-9]+$/.test(line));
-        }
-        
-        console.log(`📊 ${EANProductsList.length} produtos encontrados na lista`.cyan);
-        
-        /* > NOVO SISTEMA: getAllProductsFromShopify já faz tudo automaticamente */
-        console.log('🛍️ Obtendo produtos da Shopify...'.yellow);
-        
-        // CORREÇÃO: getAllProductsFromShopify agora faz todo o processamento
+        // Processar todos os produtos (a função agora faz tudo internamente)
+        console.log('🛍️ Iniciando processamento de produtos...'.yellow);
         const result = await getAllProductsFromShopify(shopifyClient);
         
-        /* > Estatísticas finais (já calculadas pelo novo sistema) */
-        console.log('\\n📊 Sincronização concluída!'.green.bold);
-        console.log(`   • Total processados: ${result.processed}`.cyan);
-        console.log(`   • Sucessos: ${result.success}`.green);
-        console.log(`   • Erros: ${result.errors}`.red);
-        console.log(`   • Ignorados (vazios/existentes): ${result.skipped}`.yellow);
-        console.log(`   • Taxa de sucesso: ${((result.success / Math.max(result.processed - result.skipped, 1)) * 100).toFixed(1)}%`.cyan);
-        
-        /* > Enviar resumo para Discord */
-        try {
-            await sendMessage(`🎉 Sincronização concluída!\\n📊 Processados: ${result.processed} | ✅ Sucessos: ${result.success} | ❌ Erros: ${result.errors}`);
-        } catch (discordError) {
-            console.log(`⚠️ Erro ao enviar resumo Discord: ${discordError.message}`.yellow);
+        // Validar resultado
+        if (!result || typeof result !== 'object') {
+            throw new Error('Resultado inválido da função getAllProductsFromShopify');
         }
         
-        /* > 'Limpar' Variáveis */
-        shopifyClient = null;
-        EANProductsList = null;
+        // Estatísticas finais
+        console.log('\n📊 Sincronização concluída!'.green.bold);
+        console.log(`   • Total processados: ${result.processed || 0}`.cyan);
+        console.log(`   • Sucessos: ${result.success || 0}`.green);
+        console.log(`   • Erros: ${result.errors || 0}`.red);
+        console.log(`   • Ignorados (vazios/existentes): ${result.skipped || 0}`.yellow);
+        
+        // Calcular taxa de sucesso
+        const processedForSuccess = Math.max((result.processed || 0) - (result.skipped || 0), 1);
+        const successRate = ((result.success || 0) / processedForSuccess * 100).toFixed(1);
+        console.log(`   • Taxa de sucesso: ${successRate}%`.cyan);
+        
+        // Enviar resumo para Discord
+        try {
+            const discordMessage = `🎉 Sincronização concluída!\n📊 Processados: ${result.processed || 0} | ✅ Sucessos: ${result.success || 0} | ❌ Erros: ${result.errors || 0} | ⚠️ Ignorados: ${result.skipped || 0}`;
+            await sendMessage(discordMessage);
+            console.log('📢 Resumo enviado para Discord'.green);
+        } catch (discordError) {
+            console.log(`⚠️ Erro ao enviar resumo Discord: ${discordError.message}`.yellow);
+            // Não é erro fatal, continua
+        }
         
         console.log('🏁 Processo finalizado com sucesso!'.green.bold);
         
     } catch (error) {
         console.log(`🚨 Erro fatal na sincronização: ${error.message}`.red.bold);
-        console.error(error.stack);
+        console.error('Stack trace:', error.stack);
         
         // Enviar notificação de erro fatal para Discord
         try {
@@ -84,14 +68,14 @@ async function executeAsyncTask() {
     }
 }
 
-// Executar apenas uma vez e terminar
-// O agendamento é feito pelo GitHub Actions (cron)
+// Executar sincronização
 executeAsyncTask()
     .then(() => {
         console.log('✅ Sincronização executada com sucesso!'.green);
-        process.exit(0); // Terminar com sucesso
+        process.exit(0);
     })
     .catch((error) => {
         console.log(`❌ Erro na execução: ${error.message}`.red);
-        process.exit(1); // Terminar com erro
+        console.error('Erro completo:', error);
+        process.exit(1);
     });
