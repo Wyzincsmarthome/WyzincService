@@ -1,203 +1,135 @@
+// FICHEIRO COMPLETO E MODIFICADO: src/functions/shopifyAPI/getAllProductsFromShopify.js
+
 require('colors');
 const fs = require('fs');
+const pLimit = require('p-limit'); // NOVO: Importar a biblioteca p-limit
 const { getProductFromSupplier } = require('../supplierAPI');
 const createProductToShopify = require('./createProductToShopify');
 
+// As funções auxiliares não precisam de alteração
 function generateProductTags(product) {
-    const tags = [];
-    
-    if (!product) {
-        console.log('Produto undefined - nao e possivel gerar tags');
-        return [];
-    }
-    
-    let brandTag = '';
-    if (product.brand) {
-        if (product.brand.toLowerCase() === 'xiaomi' && product.name && product.name.toLowerCase().includes('yeelight')) {
-            brandTag = 'Yeelight';
-        } else {
-            const brandMap = {
-                'xiaomi': 'Xiaomi',
-                'baseus': 'Baseus',
-                'torras': 'Torras',
-                'apple': 'Apple',
-                'hutt': 'Hutt',
-                'petkit': 'Petkit',
-                'kingston': 'Kingston'
-            };
-            brandTag = brandMap[product.brand.toLowerCase()] || product.brand;
-        }
-        if (brandTag) tags.push(brandTag);
-    }
-    
-    let categoryTag = '';
-    const productName = (product.name || '').toLowerCase();
-    const productDescription = (product.description || '').toLowerCase();
-    const productFamily = (product.family || '').toLowerCase();
-    
-    if (productName.includes('aspirador robo') || productName.includes('robot vacuum') || productName.includes('mi robot')) {
-        categoryTag = 'Aspirador Robo';
-    } else if (productName.includes('aspirador vertical') || productDescription.includes('aspirador vertical') || productDescription.includes('tipo aspirador vertical')) {
-        categoryTag = 'Aspirador Vertical';
-    } else if (productName.includes('mini aspirador')) {
-        categoryTag = 'Mini Aspirador';
-    } else if (productName.includes('aspirador') || productFamily.includes('aspiracao')) {
-        categoryTag = 'Aspiradores';
-    } else if (productName.includes('smart tv') || productName.includes('televisao') || productFamily.includes('tvs') || productName.includes(' tv ') || productName.includes('qled') || productName.includes('oled')) {
-        categoryTag = 'TVs';
-    } else if (productName.includes('camara') || productName.includes('camera') || productName.includes('webcam')) {
-        categoryTag = 'Camaras';
-    } else if (productName.includes('sensor')) {
-        categoryTag = 'Sensores Inteligentes';
-    } else if (productName.includes('fechadura') || productName.includes('lock')) {
-        categoryTag = 'Fechaduras Inteligentes';
-    } else if (productName.includes('tomada') || productName.includes('socket') || productName.includes('plug')) {
-        categoryTag = 'Tomadas';
-    } else if (productName.includes('controlo remoto') || productName.includes('comando') || productName.includes('remote')) {
-        categoryTag = 'Controlo Remoto';
-    } else if (productName.includes('iluminacao') || productName.includes('luz') || productName.includes('lamp') || productName.includes('light')) {
-        categoryTag = 'Iluminacao';
-    } else if (productName.includes('cortina') || productName.includes('curtain')) {
-        categoryTag = 'Motor Cortinas';
-    } else if (productName.includes('campainha') || productName.includes('doorbell')) {
-        categoryTag = 'Campainha Inteligente';
-    } else if (productName.includes('interruptor') || productName.includes('switch')) {
-        categoryTag = 'Interruptor Inteligente';
-    } else if (productName.includes('hub') || productName.includes('gateway')) {
-        categoryTag = 'Hubs Inteligentes';
-    } else if (productName.includes('assistente virtual') || productName.includes('alexa') || productName.includes('google assistant')) {
-        categoryTag = 'Assistentes Virtuais';
-    } else if (productName.includes('painel')) {
-        categoryTag = 'Painel Controlo';
-    } else if (productName.includes('acessorio') && productName.includes('aspirador')) {
-        categoryTag = 'Acessorios Aspiradores';
-    } else if (productName.includes('inteligente') || productName.includes('smart')) {
-        categoryTag = 'Gadgets Inteligentes';
-    } else {
-        if (product.brand && product.brand.toLowerCase() === 'petkit') {
-            categoryTag = 'Gadgets P/ Animais';
-        } else {
-            categoryTag = 'Gadgets Diversos';
-        }
-    }
-    
-    if (categoryTag) tags.push(categoryTag);
-    
-    console.log('Tags geradas para', product.name || 'produto sem nome', ':', tags);
-    return tags;
+    const tags = [];
+    if (!product) {
+        console.log('Produto undefined - nao e possivel gerar tags');
+        return [];
+    }
+    let brandTag = '';
+    if (product.brand) {
+        if (product.brand.toLowerCase() === 'xiaomi' && product.name && product.name.toLowerCase().includes('yeelight')) {
+            brandTag = 'Yeelight';
+        } else {
+            const brandMap = { 'xiaomi': 'Xiaomi', 'baseus': 'Baseus', 'torras': 'Torras', 'apple': 'Apple', 'hutt': 'Hutt', 'petkit': 'Petkit', 'kingston': 'Kingston' };
+            brandTag = brandMap[product.brand.toLowerCase()] || product.brand;
+        }
+        if (brandTag) tags.push(brandTag);
+    }
+    let categoryTag = '';
+    const productName = (product.name || '').toLowerCase();
+    const productDescription = (product.description || '').toLowerCase();
+    const productFamily = (product.family || '').toLowerCase();
+    if (productName.includes('aspirador robo') || productName.includes('robot vacuum') || productName.includes('mi robot')) { categoryTag = 'Aspirador Robo'; } else if (productName.includes('aspirador vertical') || productDescription.includes('aspirador vertical') || productDescription.includes('tipo aspirador vertical')) { categoryTag = 'Aspirador Vertical'; } else if (productName.includes('mini aspirador')) { categoryTag = 'Mini Aspirador'; } else if (productName.includes('aspirador') || productFamily.includes('aspiracao')) { categoryTag = 'Aspiradores'; } else if (productName.includes('smart tv') || productName.includes('televisao') || productFamily.includes('tvs') || productName.includes(' tv ') || productName.includes('qled') || productName.includes('oled')) { categoryTag = 'TVs'; } else if (productName.includes('camara') || productName.includes('camera') || productName.includes('webcam')) { categoryTag = 'Camaras'; } else if (productName.includes('sensor')) { categoryTag = 'Sensores Inteligentes'; } else if (productName.includes('fechadura') || productName.includes('lock')) { categoryTag = 'Fechaduras Inteligentes'; } else if (productName.includes('tomada') || productName.includes('socket') || productName.includes('plug')) { categoryTag = 'Tomadas'; } else if (productName.includes('controlo remoto') || productName.includes('comando') || productName.includes('remote')) { categoryTag = 'Controlo Remoto'; } else if (productName.includes('iluminacao') || productName.includes('luz') || productName.includes('lamp') || productName.includes('light')) { categoryTag = 'Iluminacao'; } else if (productName.includes('cortina') || productName.includes('curtain')) { categoryTag = 'Motor Cortinas'; } else if (productName.includes('campainha') || productName.includes('doorbell')) { categoryTag = 'Campainha Inteligente'; } else if (productName.includes('interruptor') || productName.includes('switch')) { categoryTag = 'Interruptor Inteligente'; } else if (productName.includes('hub') || productName.includes('gateway')) { categoryTag = 'Hubs Inteligentes'; } else if (productName.includes('assistente virtual') || productName.includes('alexa') || productName.includes('google assistant')) { categoryTag = 'Assistentes Virtuais'; } else if (productName.includes('painel')) { categoryTag = 'Painel Controlo'; } else if (productName.includes('acessorio') && productName.includes('aspirador')) { categoryTag = 'Acessorios Aspiradores'; } else if (productName.includes('inteligente') || productName.includes('smart')) { categoryTag = 'Gadgets Inteligentes'; } else { if (product.brand && product.brand.toLowerCase() === 'petkit') { categoryTag = 'Gadgets P/ Animais'; } else { categoryTag = 'Gadgets Diversos'; } }
+    if (categoryTag) tags.push(categoryTag);
+    console.log('Tags geradas para', product.name || 'produto sem nome', ':', tags);
+    return tags;
 }
 
 function processProductPrices(product) {
-    console.log('Processando precos...');
-    console.log('   Preco original (price):', product.price);
-    console.log('   PVP original (pvpr):', product.pvpr);
-    
-    let costPrice = 0;
-    let retailPrice = 0;
-    
-    if (product.price) {
-        const priceStr = String(product.price);
-        console.log('   Processando price string:', JSON.stringify(priceStr));
-        
-        const cleanPrice = priceStr.replace(/[^0-9.,]/g, '').replace(',', '.');
-        costPrice = parseFloat(cleanPrice) || 0;
-        console.log('   Preco de custo final:', costPrice);
-    }
-    
-    if (product.pvpr) {
-        const pvprStr = String(product.pvpr);
-        console.log('   Processando pvpr string:', JSON.stringify(pvprStr));
-        
-        const cleanPvpr = pvprStr.replace(/[^0-9.,]/g, '').replace(',', '.');
-        retailPrice = parseFloat(cleanPvpr) || costPrice;
-        console.log('   PVP final:', retailPrice);
-    } else {
-        retailPrice = costPrice;
-    }
-    
-    if (costPrice <= 0) {
-        console.log('Preco de custo invalido, usando 1 euro');
-        costPrice = 1;
-    }
-    if (retailPrice <= 0) {
-        console.log('PVP invalido, usando preco de custo');
-        retailPrice = costPrice;
-    }
-    
-    console.log('Precos finais processados:');
-    console.log('   Preco de custo:', costPrice + ' euros');
-    console.log('   PVP (preco de venda):', retailPrice + ' euros');
-    
-    return { costPrice, retailPrice };
+    console.log('Processando precos...');
+    let costPrice = 0, retailPrice = 0;
+    if (product.price) { const priceStr = String(product.price); const cleanPrice = priceStr.replace(/[^0-9.,]/g, '').replace(',', '.'); costPrice = parseFloat(cleanPrice) || 0; }
+    if (product.pvpr) { const pvprStr = String(product.pvpr); const cleanPvpr = pvprStr.replace(/[^0-9.,]/g, '').replace(',', '.'); retailPrice = parseFloat(cleanPvpr) || costPrice; } else { retailPrice = costPrice; }
+    if (costPrice <= 0) costPrice = 1;
+    if (retailPrice <= 0) retailPrice = costPrice;
+    console.log('Precos finais processados: Custo:', costPrice, 'Venda:', retailPrice);
+    return { costPrice, retailPrice };
 }
 
 function processStock(stockString) {
-    console.log('Processando stock:', stockString);
-    
-    if (!stockString) {
-        console.log('   Stock nao definido, definindo como 0');
-        return 0;
-    }
-    
-    const stockLower = stockString.toLowerCase();
-    
-    if (
-        stockLower.includes('sem stock') || 
-        stockLower.includes('indisponivel') || 
-        stockLower.includes('esgotado') ||
-        stockLower.includes('ruptura')
-    ) {
-        console.log('   Produto sem stock, definindo como 0');
-        return 0;
-    }
-    
-    if (stockLower.includes('disponivel') && stockLower.includes('< 10')) {
-        console.log('   Stock disponivel < 10, definindo como 9');
-        return 9;
-    }
-    
-    if (stockLower.includes('reduzido') && stockLower.includes('< 2')) {
-        console.log('   Stock reduzido < 2, definindo como 1');
-        return 1;
-    }
-    
-    if (stockLower.includes('brevemente')) {
-        console.log('   Produto brevemente disponivel, definindo como 0');
-        return 0;
-    }
-    
-    // Stock padrão se não conseguir determinar
-    console.log('   Stock indeterminado, definindo como 5');
-    return 5;
+    console.log('Processando stock:', stockString);
+    if (!stockString) return 0;
+    const stockLower = stockString.toLowerCase();
+    if (stockLower.includes('sem stock') || stockLower.includes('indisponivel') || stockLower.includes('esgotado') || stockLower.includes('ruptura')) return 0;
+    if (stockLower.includes('disponivel') && stockLower.includes('< 10')) return 9;
+    if (stockLower.includes('reduzido') && stockLower.includes('< 2')) return 1;
+    if (stockLower.includes('brevemente')) return 0;
+    return 5;
 }
 
-// FUNÇÃO PRINCIPAL QUE ESTAVA EM FALTA!
+// NOVO: Função para processar um único produto, para ser usada com p-limit
+async function processSingleEan(ean, index, total, shopifyClient) {
+    console.log(`\n📦 [${index + 1}/${total}] Iniciando EAN: ${ean}`.yellow);
+    try {
+        // 1. Buscar produto da API do fornecedor
+        console.log(`  🔍 [${ean}] Consultando API do fornecedor...`.cyan);
+        const supplierProduct = await getProductFromSupplier(ean);
+
+        if (!supplierProduct) {
+            console.log(`  ⚠️ [${ean}] Produto não encontrado na API do fornecedor`.yellow);
+            return { status: 'skipped' };
+        }
+        if (!supplierProduct.name || !supplierProduct.ean) {
+            console.log(`  ⚠️ [${ean}] Produto com dados insuficientes (sem nome ou EAN)`.yellow);
+            return { status: 'skipped' };
+        }
+        console.log(`  ✅ [${ean}] Produto encontrado:`, supplierProduct.name);
+
+        // 2. Verificar se produto já existe na Shopify
+        console.log(`  🔍 [${ean}] Verificando existência na Shopify...`.cyan);
+        const existingProduct = await checkIfProductExists(shopifyClient, ean);
+        if (existingProduct) {
+            console.log(`  ⚠️ [${ean}] Produto já existe na Shopify, pulando...`.yellow);
+            return { status: 'skipped' };
+        }
+
+        // 3. Processar dados do produto
+        console.log(`  ⚙️ [${ean}] Processando dados...`.cyan);
+        const { costPrice, retailPrice } = processProductPrices(supplierProduct);
+        const stockQuantity = processStock(supplierProduct.stock);
+        const normalizedProduct = {
+            name: supplierProduct.name || supplierProduct.title || `Produto ${ean}`,
+            ean: ean,
+            price: retailPrice,
+            pvpr: retailPrice,
+            cost_price: costPrice,
+            brand: supplierProduct.brand || '',
+            family: supplierProduct.family || '',
+            description: supplierProduct.description || '',
+            short_description: supplierProduct.short_description || '',
+            stock: supplierProduct.stock || 'Disponível',
+            stock_quantity: stockQuantity,
+            images: supplierProduct.images || []
+        };
+
+        // 4. Criar produto na Shopify
+        console.log(`  🛍️ [${ean}] Criando produto na Shopify...`.green);
+        await createProductToShopify(shopifyClient, normalizedProduct);
+        console.log(`  ✅ [${ean}] Produto criado com sucesso!`.green);
+        return { status: 'success' };
+
+    } catch (productError) {
+        console.log(`  ❌ [${ean}] Erro ao processar: ${productError.message}`.red);
+        console.error('     Stack:', productError.stack);
+        return { status: 'error' };
+    }
+}
+
+// FUNÇÃO PRINCIPAL REESCRITA PARA USAR PROCESSAMENTO PARALELO
 async function getAllProductsFromShopify(shopifyClient) {
-    const stats = {
-        processed: 0,
-        success: 0,
-        errors: 0,
-        skipped: 0
-    };
-    
     try {
         console.log('🚀 Iniciando processamento de produtos...'.green);
-        
+
         // Ler lista de EANs
         const productsListPath = 'src/productsList.txt';
         if (!fs.existsSync(productsListPath)) {
             throw new Error(`Ficheiro ${productsListPath} não encontrado`);
         }
-        
         const productsListContent = fs.readFileSync(productsListPath, 'utf8');
         
         // Parsing da lista de EANs
         let EANProductsList;
         if (productsListContent.trim().startsWith('[')) {
-            // Formato JSON
             EANProductsList = JSON.parse(productsListContent);
         } else {
-            // Formato simples (um EAN por linha)
             EANProductsList = productsListContent
                 .split(/\r?\n/)
                 .map(line => line.trim())
@@ -205,148 +137,41 @@ async function getAllProductsFromShopify(shopifyClient) {
         }
         
         console.log(`📊 Total de EANs para processar: ${EANProductsList.length}`.cyan);
-        
-        // Processar cada EAN
-        for (let i = 0; i < EANProductsList.length; i++) {
-            const ean = EANProductsList[i];
-            stats.processed++;
-            
-            console.log(`\n📦 [${i + 1}/${EANProductsList.length}] Processando EAN: ${ean}`.yellow);
-            
-            try {
-                // 1. Buscar produto da API do fornecedor
-                console.log('   🔍 Consultando API do fornecedor...'.cyan);
-                const supplierProduct = await getProductFromSupplier(ean);
-                
-                if (!supplierProduct) {
-                    console.log('   ⚠️ Produto não encontrado na API do fornecedor'.yellow);
-                    stats.skipped++;
-                    continue;
-                }
-                
-                // 2. Verificar se produto tem dados mínimos
-                if (!supplierProduct.name || !supplierProduct.ean) {
-                    console.log('   ⚠️ Produto com dados insuficientes (sem nome ou EAN)'.yellow);
-                    stats.skipped++;
-                    continue;
-                }
-                
-                console.log('   ✅ Produto encontrado:', supplierProduct.name);
-                
-                // 3. Verificar se produto já existe na Shopify
-                console.log('   🔍 Verificando se produto já existe na Shopify...'.cyan);
-                const existingProduct = await checkIfProductExists(shopifyClient, ean);
-                
-                if (existingProduct) {
-                    console.log('   ⚠️ Produto já existe na Shopify, pulando...'.yellow);
-                    stats.skipped++;
-                    continue;
-                }
-                
-                // 4. Processar dados do produto
-                console.log('   ⚙️ Processando dados do produto...'.cyan);
-                
-                // Processar preços
-                const { costPrice, retailPrice } = processProductPrices(supplierProduct);
-                
-                // Processar stock
-                const stockQuantity = processStock(supplierProduct.stock);
-                
-                // Criar objeto produto normalizado
-                const normalizedProduct = {
-                    name: supplierProduct.name || supplierProduct.title || `Produto ${ean}`,
-                    ean: ean,
-                    price: retailPrice, // Usar PVP como preço principal
-                    pvpr: retailPrice,
-                    cost_price: costPrice,
-                    brand: supplierProduct.brand || '',
-                    family: supplierProduct.family || '',
-                    description: supplierProduct.description || '',
-                    short_description: supplierProduct.short_description || '',
-                    stock: supplierProduct.stock || 'Disponível',
-                    stock_quantity: stockQuantity,
-                    images: supplierProduct.images || []
-                };
-                
-                console.log('   📄 Dados processados:');
-                console.log('     • Nome:', normalizedProduct.name);
-                console.log('     • EAN:', normalizedProduct.ean);
-                console.log('     • Preço:', normalizedProduct.price);
-                console.log('     • Marca:', normalizedProduct.brand);
-                console.log('     • Stock:', stockQuantity);
-                console.log('     • Imagens:', normalizedProduct.images.length);
-                
-                // 5. Criar produto na Shopify
-                console.log('   🛍️ Criando produto na Shopify...'.green);
-                await createProductToShopify(shopifyClient, normalizedProduct);
-                
-                console.log('   ✅ Produto criado com sucesso!'.green);
-                stats.success++;
-                
-                // Delay entre produtos para não sobrecarregar as APIs
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-            } catch (productError) {
-                console.log(`   ❌ Erro ao processar produto ${ean}: ${productError.message}`.red);
-                console.error('     Stack:', productError.stack);
-                stats.errors++;
-                
-                // Continuar com próximo produto mesmo em caso de erro
-                continue;
-            }
-        }
-        
+
+        // NOVO: Configurar o limite de concorrência
+        // Vamos processar 5 produtos em simultâneo. Este valor pode ser ajustado.
+        const limit = pLimit(5);
+
+        // NOVO: Mapear cada EAN para uma tarefa de processamento controlada pelo p-limit
+        const tasks = EANProductsList.map((ean, index) => {
+            return limit(() => processSingleEan(ean, index, EANProductsList.length, shopifyClient));
+        });
+
+        // NOVO: Executar todas as tarefas em paralelo e esperar pela sua conclusão
+        const results = await Promise.all(tasks);
+
+        // NOVO: Calcular as estatísticas a partir dos resultados
+        const stats = {
+            processed: EANProductsList.length,
+            success: results.filter(r => r.status === 'success').length,
+            errors: results.filter(r => r.status === 'error').length,
+            skipped: results.filter(r => r.status === 'skipped').length
+        };
+
         console.log('\n🏁 Processamento concluído!'.green.bold);
         return stats;
-        
+
     } catch (error) {
         console.log(`❌ Erro fatal em getAllProductsFromShopify: ${error.message}`.red.bold);
         throw error;
     }
 }
 
-// Função auxiliar para verificar se produto já existe
+// Função auxiliar para verificar se produto já existe (sem alterações)
 async function checkIfProductExists(shopifyClient, ean) {
-    try {
-        const query = `
-            query getProductsBySku($query: String!) {
-                products(first: 1, query: $query) {
-                    edges {
-                        node {
-                            id
-                            title
-                            variants(first: 1) {
-                                edges {
-                                    node {
-                                        sku
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        `;
-        
-        const variables = {
-            query: `sku:${ean}`
-        };
-        
-        const response = await shopifyClient.request(query, variables);
-        
-        if (response && response.data && response.data.products && response.data.products.edges.length > 0) {
-            const product = response.data.products.edges[0].node;
-            console.log('     Produto existente encontrado:', product.title);
-            return product;
-        }
-        
-        return null;
-        
-    } catch (error) {
-        console.log('     Erro ao verificar produto existente:', error.message);
-        // Em caso de erro, assumir que não existe para tentar criar
-        return null;
-    }
-}
-
-module.exports = getAllProductsFromShopify;
+    try {
+        const query = `
+            query getProductsBySku($query: String!) {
+                products(first: 1, query: $query) {
+                    edges {
+                        node { id title variants(first: 1) { edges { node { sku } } } }
