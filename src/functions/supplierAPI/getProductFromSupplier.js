@@ -13,15 +13,14 @@ async function getProductFromSupplier(ean) {
         }
         
         console.log('Credenciais configuradas:');
-        console.log('   API_USER:', apiUser);
-        console.log('   API_PASSWORD:', apiPassword ? 'Definido' : 'Nao definido');
-        console.log('   API_TOKEN:', apiToken ? 'Definido' : 'Nao definido');
+        console.log('    API_USER:', apiUser);
+        console.log('    API_PASSWORD:', apiPassword ? 'Definido' : 'Nao definido');
+        console.log('    API_TOKEN:', apiToken ? 'Definido' : 'Nao definido');
         
-        // Configuração de retry com timeouts progressivos
+        // CONFIGURAÇÃO CORRETA: Timeouts longos para evitar falhas desnecessárias
         const retryConfig = [
-            { timeout: 30000, attempt: 1 },
-            { timeout: 60000, attempt: 2 },
-            { timeout: 120000, attempt: 3 }
+            { timeout: 120000, attempt: 1 }, // Tentativa 1: Esperar até 2 minutos
+            { timeout: 180000, attempt: 2 }  // Tentativa 2: Esperar até 3 minutos (para casos extremos)
         ];
         
         for (const config of retryConfig) {
@@ -50,30 +49,16 @@ async function getProductFromSupplier(ean) {
                 });
                 
                 console.log(`Tentativa ${config.attempt} - Status:`, response.status);
-                console.log('Resposta completa:', JSON.stringify(response.data, null, 2));
                 
                 if (response.status === 200 && Array.isArray(response.data) && response.data.length > 0) {
                     const rawProduct = response.data[0];
-                    
-                    // Verificar se é um erro
                     if (rawProduct.status === 'ERROR') {
                         console.log('Erro retornado pela API:', rawProduct.message);
                         return null;
                     }
-                    
-                    // Se chegou aqui, o produto foi encontrado
-                    console.log('Produto encontrado na API:', rawProduct.name || rawProduct.title || 'Nome nao disponivel');
-                    console.log('Estrutura do produto:', Object.keys(rawProduct));
-                    console.log('Dados do produto:');
-                    console.log('   Nome:', rawProduct.name);
-                    console.log('   Titulo:', rawProduct.title);
-                    console.log('   Preco:', rawProduct.price);
-                    console.log('   PVP:', rawProduct.pvpr);
-                    console.log('   Marca:', rawProduct.brand);
-                    console.log('   Stock:', rawProduct.stock);
-                    console.log('   Descricao:', rawProduct.description);
-                    
+                    console.log('Produto encontrado na API:', rawProduct.name || 'Nome nao disponivel');
                     return rawProduct;
+
                 } else if (response.status === 200 && Array.isArray(response.data) && response.data.length === 0) {
                     console.log('Produto nao encontrado na API (array vazio)');
                     return null;
@@ -86,27 +71,24 @@ async function getProductFromSupplier(ean) {
                 console.log(`Tentativa ${config.attempt} falhou:`, error.message);
                 
                 if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-                    console.log(`   Timeout de ${config.timeout}ms excedido`);
+                    console.log(`    Timeout de ${config.timeout}ms excedido`);
                     if (config.attempt < retryConfig.length) {
-                        console.log(`   Tentando novamente com timeout maior...`);
-                        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s before retry
+                        console.log(`    Tentando novamente...`);
+                        await new Promise(resolve => setTimeout(resolve, 2000));
                         continue;
                     }
                 } else if (error.response) {
-                    console.log('   Status:', error.response.status);
-                    console.log('   Dados:', JSON.stringify(error.response.data, null, 2));
-                    // Se não é timeout, não vale a pena tentar novamente
+                    console.log('    Status:', error.response.status);
+                    console.log('    Dados:', JSON.stringify(error.response.data, null, 2));
                     break;
                 }
                 
-                // Se é a última tentativa, retornar null
                 if (config.attempt === retryConfig.length) {
-                    console.log('Todas as tentativas falharam - API Suprides pode estar indisponivel');
+                    console.log('Todas as tentativas falharam para o EAN', ean);
                     return null;
                 }
             }
         }
-        
         return null;
         
     } catch (error) {
@@ -115,5 +97,5 @@ async function getProductFromSupplier(ean) {
     }
 }
 
-module.exports = getProductFromSupplier;
-
+// Corrigido para exportar corretamente
+module.exports = { getProductFromSupplier };
