@@ -4,7 +4,6 @@ async function createAuth() {
     try {
         console.log('🔐 Configurando autenticação Shopify...');
         
-        // CORREÇÃO: Usar SHOPIFY_STORE_URL (como está no workflow) e extrair domain
         const storeUrl = process.env.SHOPIFY_STORE_URL;
         const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
         
@@ -16,7 +15,6 @@ async function createAuth() {
             throw new Error('SHOPIFY_ACCESS_TOKEN não está definido nas variáveis de ambiente');
         }
         
-        // Extrair domain da URL (remover https:// e .myshopify.com se necessário)
         let storeDomain = storeUrl;
         if (storeUrl.includes('://')) {
             storeDomain = storeUrl.split('://')[1];
@@ -31,12 +29,12 @@ async function createAuth() {
         const client = createAdminApiClient({
             storeDomain: storeDomain,
             accessToken: accessToken,
-            apiVersion: '2024-07' // Versão estável
+            // ALTERADO: Versão da API atualizada para remover o aviso de depreciação
+            apiVersion: '2025-07'
         });
         
         console.log('🔍 Testando conectividade básica...');
         
-        // Teste de conectividade CORRIGIDO - sem campo 'domain'
         const testQuery = `
             query testConnection {
                 shop {
@@ -63,16 +61,9 @@ async function createAuth() {
         } catch (testError) {
             console.log('⚠️ Cliente configurado mas teste de conectividade falhou');
             console.log('📄 Resposta do teste:', JSON.stringify(testError, null, 2));
-            // Continuar mesmo com falha no teste - pode ser problema de permissões
         }
         
         return client;
         
     } catch (error) {
-        console.error('❌ Erro na configuração da autenticação Shopify:', error.message);
-        throw error;
-    }
-}
-
-module.exports = createAuth;
-
+        console.error('❌ Erro na
