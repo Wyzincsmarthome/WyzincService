@@ -17,7 +17,6 @@ async function getProductFromSupplier(ean) {
         console.log('    API_PASSWORD:', apiPassword ? 'Definido' : 'Nao definido');
         console.log('    API_TOKEN:', apiToken ? 'Definido' : 'Nao definido');
         
-        // CONFIGURAÇÃO CORRETA: Timeouts longos para evitar falhas desnecessárias
         const retryConfig = [
             { timeout: 120000, attempt: 1 }, // Tentativa 1: Esperar até 2 minutos
             { timeout: 180000, attempt: 2 }  // Tentativa 2: Esperar até 3 minutos (para casos extremos)
@@ -97,5 +96,5 @@ async function getProductFromSupplier(ean) {
     }
 }
 
-// Corrigido para exportar corretamente
+// ALTERAÇÃO FINAL E CRUCIAL: Exportar como um objeto
 module.exports = { getProductFromSupplier };
