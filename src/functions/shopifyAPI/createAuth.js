@@ -29,7 +29,6 @@ async function createAuth() {
         const client = createAdminApiClient({
             storeDomain: storeDomain,
             accessToken: accessToken,
-            // ALTERADO: Versão da API atualizada para remover o aviso de depreciação
             apiVersion: '2025-07'
         });
         
@@ -66,4 +65,9 @@ async function createAuth() {
         return client;
         
     } catch (error) {
-        console.error('❌ Erro na
+        console.error('❌ Erro na configuração da autenticação Shopify:', error.message);
+        throw error;
+    }
+}
+
+module.exports = createAuth;
