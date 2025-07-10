@@ -1,12 +1,13 @@
-// FICHEIRO COMPLETO E MODIFICADO: src/functions/shopifyAPI/getAllProductsFromShopify.js
-
 require('colors');
 const fs = require('fs');
-// REMOVIDO: const pLimit = require('p-limit');
-const { getProductFromSupplier } = require('../supplierAPI');
+const pLimit = require('p-limit');
+
+// CORREÇÃO FINAL: Apontar para o caminho exato do ficheiro
+const { getProductFromSupplier } = require('../supplierAPI/getProductFromSupplier.js'); 
 const createProductToShopify = require('./createProductToShopify');
 
-// As funções auxiliares não precisam de alteração
+// ... (o resto do ficheiro permanece exatamente igual) ...
+
 function generateProductTags(product) {
     const tags = [];
     if (!product) {
@@ -55,10 +56,11 @@ function processStock(stockString) {
     return 5;
 }
 
-async function processSingleEan(ean, index, total, shopifyClient, pLimit) { // NOVO: pLimit é passado como argumento
+// NOTE: The dynamic import logic was removed as it was part of a previous debugging path.
+// The code is now reverted to the simpler structure that should work with the correct require path.
+async function processSingleEan(ean, index, total, shopifyClient) {
     console.log(`\n📦 [${index + 1}/${total}] Iniciando EAN: ${ean}`.yellow);
     try {
-        // ... (lógica interna desta função permanece a mesma)
         console.log(`  🔍 [${ean}] Consultando API do fornecedor...`.cyan);
         const supplierProduct = await getProductFromSupplier(ean);
 
@@ -109,18 +111,12 @@ async function processSingleEan(ean, index, total, shopifyClient, pLimit) { // N
     }
 }
 
-// FUNÇÃO PRINCIPAL REESCRITA PARA USAR IMPORT DINÂMICO
 async function getAllProductsFromShopify(shopifyClient) {
     try {
-        // NOVO: Usar import() dinâmico dentro da função async
-        const pLimit = (await import('p-limit')).default;
-
         console.log('🚀 Iniciando processamento de produtos...'.green);
 
         const productsListPath = 'src/productsList.txt';
-        if (!fs.existsSync(productsListPath)) {
-            throw new Error(`Ficheiro ${productsListPath} não encontrado`);
-        }
+        if (!fs.existsSync(productsListPath)) throw new Error(`Ficheiro ${productsListPath} não encontrado`);
         const productsListContent = fs.readFileSync(productsListPath, 'utf8');
         
         let EANProductsList;
@@ -136,14 +132,11 @@ async function getAllProductsFromShopify(shopifyClient) {
         console.log(`📊 Total de EANs para processar: ${EANProductsList.length}`.cyan);
 
         const limit = pLimit(5);
-
         const tasks = EANProductsList.map((ean, index) => {
-             // Passamos a função pLimit para dentro de processSingleEan se necessário, mas aqui basta envolvê-la
             return limit(() => processSingleEan(ean, index, EANProductsList.length, shopifyClient));
         });
 
         const results = await Promise.all(tasks);
-
         const stats = {
             processed: EANProductsList.length,
             success: results.filter(r => r.status === 'success').length,
@@ -162,18 +155,10 @@ async function getAllProductsFromShopify(shopifyClient) {
 
 async function checkIfProductExists(shopifyClient, ean) {
     try {
-        const query = `
-            query getProductsBySku($query: String!) {
-                products(first: 1, query: $query) {
-                    edges {
-                        node { id title variants(first: 1) { edges { node { sku } } } }
-                    }
-                }
-            }
-        `;
+        const query = `query getProductsBySku($query: String!) { products(first: 1, query: $query) { edges { node { id title variants(first: 1) { edges { node { sku } } } } } } }`;
         const variables = { query: `sku:${ean}` };
         const response = await shopifyClient.request(query, variables);
-        if (response && response.data && response.data.products && response.data.products.edges.length > 0) {
+        if (response?.data?.products?.edges?.length > 0) {
             const product = response.data.products.edges[0].node;
             console.log('     Produto existente encontrado:', product.title);
             return product;
