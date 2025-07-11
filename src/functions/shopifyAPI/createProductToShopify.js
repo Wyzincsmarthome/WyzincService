@@ -1,10 +1,12 @@
 require('colors');
 const axios = require('axios');
 
+// Funções auxiliares que já tínhamos
 function processProductPrices(product) {
-    if (!product) return { retailPrice: 0 };
-    let price = String(product.price || product.pvpr || '0').replace(/[^0-9.,]/g, '').replace(',', '.');
-    return { retailPrice: parseFloat(price) || 0 };
+    if (!product) return { retailPrice: 0, costPrice: 0 };
+    let price = String(product.price || '0').replace(/[^0-9.,]/g, '').replace(',', '.');
+    let cost = String(product.price || '0').replace(/[^0-9.,]/g, '').replace(',', '.'); // Usando price como base para cost
+    return { retailPrice: parseFloat(price) || 0, costPrice: parseFloat(cost) || 0 };
 }
 function processStock(stockString) {
     if (!stockString) return 0;
@@ -16,7 +18,8 @@ function processStock(stockString) {
     return 5;
 }
 
-async function createProductToShopify(shopifyClient, product) {
+// A função createProductToShopify reescrita com a lógica final
+async function createProductToShopify(shopifyClient, product, tags) {
     const storeUrl = process.env.SHOPIFY_STORE_URL;
     const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
     const locationId = process.env.SHOPIFY_LOCATION_ID;
@@ -24,73 +27,93 @@ async function createProductToShopify(shopifyClient, product) {
     const endpoint = `https://${storeUrl}/admin/api/${apiVersion}/graphql.json`;
     const headers = { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': accessToken };
 
-    try {
-        console.log(`🚀 Iniciando criação do produto em 2 passos: ${product.name}`);
+    let createdProductId = null;
 
-        // --- PASSO 1: CRIAR O PRODUTO BÁSICO ---
-        const productCreateMutation = `
+    try {
+        console.log(`🚀 Iniciando criação do produto: ${product.name}`);
+
+        // --- PASSO 1: Criar o produto com o mínimo (título) para obter os IDs ---
+        const createMutation = `
             mutation productCreate($input: ProductInput!) {
                 productCreate(input: $input) {
+                    product {
+                        id
+                        variants(first: 1) { edges { node { id } } }
+                    }
+                    userErrors { field, message }
+                }
+            }`;
+        const createInput = { input: { title: product.name } };
+        
+        console.log(`📤 Passo 1: Criando produto base...`);
+        const createResponse = await axios.post(endpoint, { query: createMutation, variables: createInput }, { headers });
+        if (createResponse.data.errors) throw new Error(`Erro GraphQL no Passo 1: ${createResponse.data.errors[0].message}`);
+        if (createResponse.data.data.productCreate.userErrors.length > 0) throw new Error(`Erro API no Passo 1: ${createResponse.data.data.productCreate.userErrors[0].message}`);
+        
+        const createdProduct = createResponse.data.data.productCreate.product;
+        createdProductId = createdProduct.id;
+        const variantId = createdProduct.variants.edges[0].node.id;
+        
+        console.log(`✅ Produto base criado com ID: ${createdProductId}`.green);
+        console.log(`   - ID da Variante Padrão: ${variantId}`);
+
+        // --- PASSO 2: Atualizar a variante com preço, SKU e stock ---
+        const { retailPrice, costPrice } = processProductPrices(product);
+        const stockQuantity = processStock(product.stock);
+        
+        const variantUpdateMutation = `
+            mutation productVariantUpdate($input: ProductVariantInput!) {
+                productVariantUpdate(input: $input) {
+                    productVariant { id, sku, price }
+                    userErrors { field, message }
+                }
+            }`;
+        const variantInput = {
+            input: {
+                id: variantId,
+                price: retailPrice.toString(),
+                sku: product.ean,
+                inventoryItem: { cost: costPrice.toString(), tracked: true },
+                inventoryQuantities: [{ availableQuantity: stockQuantity, locationId: `gid://shopify/Location/${locationId}` }]
+            }
+        };
+
+        console.log(`📤 Passo 2: Atualizando variante ${variantId}...`);
+        const variantResponse = await axios.post(endpoint, { query: variantUpdateMutation, variables: variantInput }, { headers });
+        if (variantResponse.data.errors) throw new Error(`Erro GraphQL no Passo 2: ${variantResponse.data.errors[0].message}`);
+        if (variantResponse.data.data.productVariantUpdate.userErrors.length > 0) throw new Error(`Erro API no Passo 2: ${variantResponse.data.data.productVariantUpdate.userErrors[0].message}`);
+        
+        console.log(`✅ Variante atualizada com sucesso!`.green);
+
+        // --- PASSO 3: Atualizar o produto com os restantes detalhes (descrição, imagens, etc.) ---
+        const productUpdateMutation = `
+            mutation productUpdate($input: ProductInput!) {
+                productUpdate(input: $input) {
                     product { id, title }
                     userErrors { field, message }
                 }
             }`;
-        const productInput = { input: { title: product.name, status: 'ACTIVE' } };
-        const productResponse = await axios.post(endpoint, { query: productCreateMutation, variables: productInput }, { headers });
-
-        if (productResponse.data.errors) throw new Error(`Erro GraphQL no Passo 1: ${productResponse.data.errors[0].message}`);
-        if (productResponse.data.data.productCreate.userErrors.length > 0) throw new Error(`Erro da API no Passo 1: ${productResponse.data.data.productCreate.userErrors[0].message}`);
-        
-        const createdProduct = productResponse.data.data.productCreate.product;
-        if (!createdProduct || !createdProduct.id) throw new Error('Falha ao obter ID do produto criado no Passo 1.');
-        
-        console.log(`✅ Produto básico criado com ID: ${createdProduct.id}`.green);
-
-        // --- PASSO 2: ADICIONAR A VARIANTE COM PREÇO, SKU E STOCK ---
-        const { retailPrice } = processProductPrices(product);
-        const stockQuantity = processStock(product.stock);
-
-        // CORREÇÃO FINAL: O nome da mutação correta é 'productVariantsBulkCreate'
-        const variantCreateMutation = `
-            mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-                productVariantsBulkCreate(productId: $productId, variants: $variants) {
-                    productVariants { id, sku, price }
-                    userErrors { field, message }
-                }
-            }`;
-        
-        // CORREÇÃO FINAL: As variáveis são passadas diretamente, não dentro de um "input"
-        const variantVariables = {
-            productId: createdProduct.id,
-            variants: [{
-                price: retailPrice.toString(),
-                sku: product.ean,
-                inventoryItem: { tracked: true },
-                inventoryQuantities: [{
-                    availableQuantity: stockQuantity,
-                    locationId: `gid://shopify/Location/${locationId}`
-                }]
-            }]
+        const productUpdateInput = {
+            input: {
+                id: createdProductId,
+                descriptionHtml: product.description || '',
+                vendor: product.brand || 'Genérico',
+                productType: product.family || 'Geral',
+                tags: tags,
+                images: (product.images || []).map(img => ({ src: img }))
+            }
         };
 
-        console.log(`📤 Passo 2: Adicionando variante ao produto ${createdProduct.id}...`);
-        const variantResponse = await axios.post(endpoint, { query: variantCreateMutation, variables: variantVariables }, { headers });
-        
-        if (variantResponse.data.errors) throw new Error(`Erro GraphQL no Passo 2: ${variantResponse.data.errors[0].message}`);
-        if (variantResponse.data.data.productVariantsBulkCreate.userErrors.length > 0) throw new Error(`Erro da API no Passo 2: ${variantResponse.data.data.productVariantsBulkCreate.userErrors[0].message}`);
-        
-        const createdVariants = variantResponse.data.data.productVariantsBulkCreate.productVariants;
-        if (!createdVariants || createdVariants.length === 0) throw new Error('Falha ao criar a variante do produto no Passo 2.');
+        console.log(`📤 Passo 3: Adicionando detalhes finais ao produto ${createdProductId}...`);
+        const updateResponse = await axios.post(endpoint, { query: productUpdateMutation, variables: productUpdateInput }, { headers });
+        if (updateResponse.data.errors) throw new Error(`Erro GraphQL no Passo 3: ${updateResponse.data.errors[0].message}`);
+        if (updateResponse.data.data.productUpdate.userErrors.length > 0) throw new Error(`Erro API no Passo 3: ${updateResponse.data.data.productUpdate.userErrors[0].message}`);
 
-        console.log(`✅ Variante adicionada com SKU: ${createdVariants[0].sku} e Preço: ${createdVariants[0].price}`.green);
-        console.log(`🎉 PROCESSO CONCLUÍDO COM SUCESSO PARA: ${createdProduct.title}`.green.bold);
+        console.log(`🎉 PRODUTO COMPLETO "${product.name}" CRIADO COM SUCESSO!`.green.bold);
 
     } catch (error) {
-        if (error.response) {
-            console.error('❌ Erro na resposta da API (Axios):', JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error(`❌ Erro fatal ao criar o produto ${product.name}: ${error.message}`.red);
-        }
+        if (error.response) { console.error('❌ Erro na resposta da API (Axios):', JSON.stringify(error.response.data, null, 2)); } 
+        else { console.error(`❌ Erro fatal ao criar o produto ${product.name}: ${error.message}`.red); }
         throw error;
     }
 }
