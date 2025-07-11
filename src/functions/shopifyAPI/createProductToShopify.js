@@ -1,6 +1,6 @@
 require('colors');
 
-// FUNÇÕES AUXILIARES COMPLETAS (Para garantir que não falta nada)
+// Mantemos a sua função de processamento de preços aqui para garantir que tudo funciona junto.
 function processProductPrices(product) {
     let costPrice = 0;
     let retailPrice = 0;
@@ -26,10 +26,8 @@ async function createProductToShopify(shopifyClient, product) {
     try {
         console.log(`🚀 Iniciando criação do produto: ${product.name}`);
 
-        // Processar os preços primeiro para garantir que temos valores válidos
         const { retailPrice } = processProductPrices(product);
 
-        // A mutação mais simples possível que a Shopify aceita
         const productCreateMutation = `
             mutation productCreate($input: ProductInput!) {
                 productCreate(input: $input) {
@@ -54,21 +52,23 @@ async function createProductToShopify(shopifyClient, product) {
             }
         `;
 
-        // Construir o input MAIS BÁSICO possível
         const variables = {
             input: {
                 title: product.name,
+                // ADICIONADO: Definir a Opção do produto
+                options: ["Title"], 
                 variants: [{
                     price: retailPrice.toString(),
-                    sku: product.ean
+                    sku: product.ean,
+                    // ADICIONADO: Associar a variante à Opção
+                    options: ["Default Title"] 
                 }]
             }
         };
 
-        console.log(`📤 Enviando pedido MÍNIMO para Shopify para o produto: ${product.name}`.cyan);
+        console.log(`📤 Enviando pedido COMPLETO E CORRIGIDO para Shopify para o produto: ${product.name}`.cyan);
         const response = await shopifyClient.request(productCreateMutation, variables);
 
-        // Lógica de deteção de erros
         if (response.errors) {
             const errorMessages = response.errors.graphQLErrors.map(e => e.message).join('; ');
             throw new Error(`Erro de validação do GraphQL: ${errorMessages}`);
@@ -83,12 +83,9 @@ async function createProductToShopify(shopifyClient, product) {
         }
 
         const createdProduct = response.data.productCreate.product;
-        console.log(`✅ PRODUTO BÁSICO CRIADO COM SUCESSO!`.green.bold);
+        console.log(`✅ PRODUTO CRIADO COM SUCESSO!`.green.bold);
         console.log(`   • ID: ${createdProduct.id}`);
         console.log(`   • Título: ${createdProduct.title}`);
-
-        // Se chegámos aqui, o produto foi criado.
-        // As outras informações (stock, imagens, etc.) podem ser adicionadas depois.
 
     } catch (error) {
         console.error(`❌ Erro fatal ao criar o produto ${product.name}: ${error.message}`.red);
