@@ -46,49 +46,44 @@ async function createProductToShopify(shopifyClient, product) {
         
         console.log(`✅ Produto básico criado com ID: ${createdProduct.id}`.green);
 
-        // --- PASSO 2: ATUALIZAR O PRODUTO COM A VARIANTE ---
+        // --- PASSO 2: ADICIONAR A VARIANTE COM PREÇO, SKU E STOCK ---
         const { retailPrice } = processProductPrices(product);
         const stockQuantity = processStock(product.stock);
 
-        // CORREÇÃO FINAL: O nome da mutação correta é 'productUpdate'
-        const productUpdateMutation = `
-            mutation productUpdate($input: ProductInput!) {
-                productUpdate(input: $input) {
-                    product {
-                        id
-                        variants(first: 1) { edges { node { id, sku, price } } }
-                    }
+        // CORREÇÃO FINAL: O nome da mutação correta é 'productVariantsBulkCreate'
+        const variantCreateMutation = `
+            mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                productVariantsBulkCreate(productId: $productId, variants: $variants) {
+                    productVariants { id, sku, price }
                     userErrors { field, message }
                 }
             }`;
-
-        const productUpdateInput = {
-            input: {
-                id: createdProduct.id,
-                variants: [{
-                    price: retailPrice.toString(),
-                    sku: product.ean,
-                    inventoryItem: { tracked: true },
-                    inventoryQuantities: [{
-                        availableQuantity: stockQuantity,
-                        locationId: `gid://shopify/Location/${locationId}`
-                    }]
+        
+        // CORREÇÃO FINAL: As variáveis são passadas diretamente, não dentro de um "input"
+        const variantVariables = {
+            productId: createdProduct.id,
+            variants: [{
+                price: retailPrice.toString(),
+                sku: product.ean,
+                inventoryItem: { tracked: true },
+                inventoryQuantities: [{
+                    availableQuantity: stockQuantity,
+                    locationId: `gid://shopify/Location/${locationId}`
                 }]
-            }
+            }]
         };
 
-        console.log(`📤 Passo 2: Atualizando produto ${createdProduct.id} com a variante...`);
-        const variantResponse = await axios.post(endpoint, { query: productUpdateMutation, variables: productUpdateInput }, { headers });
+        console.log(`📤 Passo 2: Adicionando variante ao produto ${createdProduct.id}...`);
+        const variantResponse = await axios.post(endpoint, { query: variantCreateMutation, variables: variantVariables }, { headers });
         
         if (variantResponse.data.errors) throw new Error(`Erro GraphQL no Passo 2: ${variantResponse.data.errors[0].message}`);
-        if (variantResponse.data.data.productUpdate.userErrors.length > 0) throw new Error(`Erro da API no Passo 2: ${variantResponse.data.data.productUpdate.userErrors[0].message}`);
+        if (variantResponse.data.data.productVariantsBulkCreate.userErrors.length > 0) throw new Error(`Erro da API no Passo 2: ${variantResponse.data.data.productVariantsBulkCreate.userErrors[0].message}`);
         
-        const updatedProduct = variantResponse.data.data.productUpdate.product;
-        if (!updatedProduct) throw new Error('Falha ao atualizar o produto com a variante no Passo 2.');
-        
-        const createdVariant = updatedProduct.variants.edges[0].node;
-        console.log(`✅ Variante adicionada com SKU: ${createdVariant.sku} e Preço: ${createdVariant.price}`.green);
-        console.log(`🎉 PROCESSO CONCLUÍDO COM SUCESSO PARA: ${updatedProduct.title}`.green.bold);
+        const createdVariants = variantResponse.data.data.productVariantsBulkCreate.productVariants;
+        if (!createdVariants || createdVariants.length === 0) throw new Error('Falha ao criar a variante do produto no Passo 2.');
+
+        console.log(`✅ Variante adicionada com SKU: ${createdVariants[0].sku} e Preço: ${createdVariants[0].price}`.green);
+        console.log(`🎉 PROCESSO CONCLUÍDO COM SUCESSO PARA: ${createdProduct.title}`.green.bold);
 
     } catch (error) {
         if (error.response) {
