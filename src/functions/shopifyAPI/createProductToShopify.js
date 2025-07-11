@@ -1,39 +1,50 @@
 require('colors');
 
-// A sua função para gerar tags. Nenhuma alteração necessária aqui.
-function generateProductTags(product) {
-    if (!product || !product.name) return [];
-    const tags = [];
-    if (product.brand) {
-        const brandMap = { 'xiaomi': 'Xiaomi', 'apple': 'Apple', /* ... etc ... */ };
-        tags.push(brandMap[product.brand.toLowerCase()] || product.brand);
+// FUNÇÕES AUXILIARES COMPLETAS (Para garantir que não falta nada)
+function processProductPrices(product) {
+    let costPrice = 0;
+    let retailPrice = 0;
+    if (product && product.price) {
+        const priceStr = String(product.price);
+        const cleanPrice = priceStr.replace(/[^0-9.,]/g, '').replace(',', '.');
+        costPrice = parseFloat(cleanPrice) || 0;
     }
-    // ... A sua lógica completa de tags aqui ...
-    return tags;
+    if (product && product.pvpr) {
+        const pvprStr = String(product.pvpr);
+        const cleanPvpr = pvprStr.replace(/[^0-9.,]/g, '').replace(',', '.');
+        retailPrice = parseFloat(cleanPvpr) || costPrice;
+    } else {
+        retailPrice = costPrice;
+    }
+    if (costPrice <= 0) costPrice = 1;
+    if (retailPrice <= 0) retailPrice = costPrice;
+    return { costPrice, retailPrice };
 }
 
 // FUNÇÃO PRINCIPAL FINAL E CORRIGIDA
 async function createProductToShopify(shopifyClient, product) {
     try {
-        console.log('🚀 Iniciando criação de produto:', product.name);
+        console.log(`🚀 Iniciando criação do produto: ${product.name}`);
 
-        const locationId = process.env.SHOPIFY_LOCATION_ID;
-        if (!locationId) {
-            throw new Error('SHOPIFY_LOCATION_ID não está definido nos secrets.');
-        }
-        const shopifyLocationGid = `gid://shopify/Location/${locationId}`;
+        // Processar os preços primeiro para garantir que temos valores válidos
+        const { retailPrice } = processProductPrices(product);
 
-        const productTags = generateProductTags(product);
-        
-        // Vamos remover o HTML complexo por agora. Usaremos apenas a descrição curta.
-        const cleanDescription = product.short_description || 'Descrição não disponível.';
-
+        // A mutação mais simples possível que a Shopify aceita
         const productCreateMutation = `
             mutation productCreate($input: ProductInput!) {
                 productCreate(input: $input) {
                     product {
                         id
                         title
+                        variants(first: 1) {
+                            edges {
+                                node {
+                                    id
+                                    price
+                                    sku
+                                }
+                            }
+                        }
                     }
                     userErrors {
                         field
@@ -43,55 +54,41 @@ async function createProductToShopify(shopifyClient, product) {
             }
         `;
 
+        // Construir o input MAIS BÁSICO possível
         const variables = {
             input: {
                 title: product.name,
-                // CORREÇÃO: Usar uma descrição simples para evitar erros de HTML
-                descriptionHtml: cleanDescription,
-                vendor: product.brand || 'Genérico',
-                productType: product.family || 'Geral',
-                status: 'ACTIVE',
-                tags: productTags,
-                // NOTA: As imagens foram removidas temporariamente para isolar o erro.
-                // Se isto funcionar, adicionamo-las num passo seguinte.
                 variants: [{
-                    price: product.price.toString(),
-                    sku: product.ean,
-                    inventoryItem: {
-                        cost: product.cost_price ? product.cost_price.toString() : null,
-                        tracked: true,
-                    },
-                    inventoryQuantities: [{
-                        availableQuantity: product.stock_quantity,
-                        locationId: shopifyLocationGid,
-                    }],
-                }],
-            },
+                    price: retailPrice.toString(),
+                    sku: product.ean
+                }]
+            }
         };
 
-        console.log(`📤 Enviando pedido simplificado para Shopify para o produto: ${product.name}`.cyan);
+        console.log(`📤 Enviando pedido MÍNIMO para Shopify para o produto: ${product.name}`.cyan);
         const response = await shopifyClient.request(productCreateMutation, variables);
-        
-        // CORREÇÃO: Lógica de deteção de erros melhorada para capturar todos os cenários
+
+        // Lógica de deteção de erros
         if (response.errors) {
-            // Este bloco captura erros de validação do GraphQL, como o que vimos
             const errorMessages = response.errors.graphQLErrors.map(e => e.message).join('; ');
             throw new Error(`Erro de validação do GraphQL: ${errorMessages}`);
         }
-
         if (response.data?.productCreate?.userErrors?.length > 0) {
             const errors = response.data.productCreate.userErrors.map(e => `${e.field}: ${e.message}`).join(', ');
             throw new Error(`Erros da API Shopify: ${errors}`);
         }
-
         if (!response.data?.productCreate?.product) {
             console.error('RESPOSTA INESPERADA DA SHOPIFY:', JSON.stringify(response, null, 2));
-            throw new Error('A API da Shopify não retornou um produto criado, mesmo sem erros explícitos.');
+            throw new Error('A API da Shopify não retornou um produto criado.');
         }
 
         const createdProduct = response.data.productCreate.product;
-        console.log(`✅ Produto "${createdProduct.title}" criado com sucesso na Shopify!`.green.bold);
-        console.log(`   • ID do Produto: ${createdProduct.id}`.green);
+        console.log(`✅ PRODUTO BÁSICO CRIADO COM SUCESSO!`.green.bold);
+        console.log(`   • ID: ${createdProduct.id}`);
+        console.log(`   • Título: ${createdProduct.title}`);
+
+        // Se chegámos aqui, o produto foi criado.
+        // As outras informações (stock, imagens, etc.) podem ser adicionadas depois.
 
     } catch (error) {
         console.error(`❌ Erro fatal ao criar o produto ${product.name}: ${error.message}`.red);
