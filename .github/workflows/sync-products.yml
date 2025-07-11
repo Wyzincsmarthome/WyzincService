@@ -31,6 +31,8 @@ jobs:
           SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
           SHOPIFY_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ACCESS_TOKEN }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # ADICIONADO: Carregar o novo secret para o ambiente
+          SHOPIFY_LOCATION_ID: ${{ secrets.SHOPIFY_LOCATION_ID }} 
         run: |
           echo "API_USER=$API_USER" >> .env
           echo "API_PASSWORD=$API_PASSWORD" >> .env
@@ -38,13 +40,12 @@ jobs:
           echo "SHOPIFY_STORE_URL=$SHOPIFY_STORE_URL" >> .env
           echo "SHOPIFY_ACCESS_TOKEN=$SHOPIFY_ACCESS_TOKEN" >> .env
           echo "DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL" >> .env
+          # ADICIONADO: Escrever o novo secret para o ficheiro .env
+          echo "SHOPIFY_LOCATION_ID=$SHOPIFY_LOCATION_ID" >> .env
           
       - name: Executar sincronização de produtos
-        run: |
-          echo "🚀 Iniciando sincronização de produtos..."
-          echo "⏰ Timestamp: $(date)"
-          node src/index.js
-          
+        run: node src/index.js
+        
       - name: Upload logs (em caso de erro)
         if: failure()
         uses: actions/upload-artifact@v4
@@ -54,4 +55,3 @@ jobs:
             *.log
             logs/
           retention-days: 7
-
