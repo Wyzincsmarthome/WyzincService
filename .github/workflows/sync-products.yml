@@ -2,49 +2,69 @@ name: WyzincService - Sincronização Automática de Stock
 
 on:
   schedule:
-    # Executa diariamente às 07:00 UTC (08:00 em Portugal no inverno, 09:00 no verão)
-    - cron: '0 7 * * *'
-  workflow_dispatch: # Permite execução manual
+    - cron: '0 7 * * *'   # 07:00 UTC
+  workflow_dispatch: {}
 
 jobs:
   sync-products:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
-        
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
-          
+
       - name: Instalar dependências
-        run: npm install
-        
-      - name: Configurar variáveis de ambiente
-        env:
-          API_USER: ${{ secrets.API_USER }}
-          API_PASSWORD: ${{ secrets.API_PASSWORD }}
-          API_TOKEN: ${{ secrets.API_TOKEN }}
-          SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
-          SHOPIFY_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ACCESS_TOKEN }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: npm ci
+
+      - name: Validar secrets (sem imprimir valores)
         run: |
-          echo "API_USER=$API_USER" >> .env
-          echo "API_PASSWORD=$API_PASSWORD" >> .env
-          echo "API_TOKEN=$API_TOKEN" >> .env
-          echo "SHOPIFY_STORE_URL=$SHOPIFY_STORE_URL" >> .env
-          echo "SHOPIFY_ACCESS_TOKEN=$SHOPIFY_ACCESS_TOKEN" >> .env
-          echo "DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL" >> .env
-          
+          test -n "${{ secrets.SHOPIFY_STORE_URL }}" || (echo "Missing SHOPIFY_STORE_URL" && exit 1)
+          test -n "${{ secrets.SHOPIFY_ACCESS_TOKEN }}" || (echo "Missing SHOPIFY_ACCESS_TOKEN" && exit 1)
+          test -n "${{ secrets.SHOPIFY_LOCATION_ID }}" || (echo "Missing SHOPIFY_LOCATION_ID" && exit 1)
+          # Suprides: aceitar TOKEN ou USER+PASSWORD
+          if [ -z "${{ secrets.API_TOKEN }}" ] && { [ -z "${{ secrets.API_USER }}" ] || [ -z "${{ secrets.API_PASSWORD }}" ]; }; then
+            echo "Missing Suprides creds: provide API_TOKEN or API_USER+API_PASSWORD"
+            exit 1
+          fi
+          # Opcionalmente SUPRIDES_BASE_URL (se necessário no teu client)
+          # test -n "${{ secrets.SUPRIDES_BASE_URL }}" || (echo "Missing SUPRIDES_BASE_URL" && exit 1)
+
+      - name: Configurar variáveis de ambiente para runtime
+        run: |
+          {
+            echo "API_USER=${{ secrets.API_USER }}";
+            echo "API_PASSWORD=${{ secrets.API_PASSWORD }}";
+            echo "API_TOKEN=${{ secrets.API_TOKEN }}";
+            echo "SHOPIFY_STORE_URL=${{ secrets.SHOPIFY_STORE_URL }}";
+            echo "SHOPIFY_ACCESS_TOKEN=${{ secrets.SHOPIFY_ACCESS_TOKEN }}";
+            echo "SHOPIFY_LOCATION_ID=${{ secrets.SHOPIFY_LOCATION_ID }}";
+            echo "DISCORD_WEBHOOK_URL=${{ secrets.DISCORD_WEBHOOK_URL }}";
+            # Controlos de execução
+            echo "DRY_RUN=true";                  # PRIMEIRA CORRIDA: true
+            echo "PUBLISH_TO_ONLINE_STORE=false"; # começa em rascunho
+            echo "PRICE_SOURCE=pvpr";
+            echo "SHOPIFY_API_VERSION=2025-01";
+          } >> .env
+
+      - name: Mostrar sumário de EANs (para debug)
+        run: |
+          if [ -f src/productsList.txt ]; then
+            echo "======= productsList.txt ======="
+            nl -ba src/productsList.txt | sed -n '1,50p'
+            echo "================================"
+          else
+            echo "Ficheiro src/productsList.txt não encontrado"; exit 1
+          fi
+
       - name: Executar sincronização de produtos
-        run: |
-          echo "🚀 Iniciando sincronização de produtos..."
-          echo "⏰ Timestamp: $(date)"
-          node src/index.js
-          
+        run: node src/index.js
+
       - name: Upload logs (em caso de erro)
         if: failure()
         uses: actions/upload-artifact@v4
@@ -54,4 +74,3 @@ jobs:
             *.log
             logs/
           retention-days: 7
-
